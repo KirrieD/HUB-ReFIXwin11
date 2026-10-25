@@ -163,7 +163,7 @@ namespace ReFix.Hub
             controlsEditor.Show();controlsEditor.Activate();
         }
         internal ControlsWindow ControlsEditor {get{return controlsEditor;}}
-        private void ControlsChanged(object sender,EventArgs e){if(!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(RefreshControls));}
+        private void ControlsChanged(object sender,EventArgs e){if(!exiting&&!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(delegate{if(!exiting)RefreshControls();}));}
         private void RefreshControls(){autoHide.IsChecked=controls.Current.AutoHideHub;HotkeyRuntimeStatus state=controls.GetRuntime("hub.toggle");string key=state==null?controls.Current.Get("hub.toggle"):state.Actual;shortcut.Text=(string.IsNullOrEmpty(key)?"Показ через трей":key)+"\nКрестик скрывает HUB";}
         internal void ShowHub() { Show(); WindowState=WindowState.Normal; Native.SetForegroundWindow(new WindowInteropHelper(this).Handle); Activate(); }
         internal void HideHub() { if(editor!=null) editor.Hide();if(controlsEditor!=null)controlsEditor.Hide(); Hide(); }

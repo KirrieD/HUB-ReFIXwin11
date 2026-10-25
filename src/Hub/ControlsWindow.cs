@@ -22,10 +22,11 @@ namespace ReFix.Hub
         private readonly Dictionary<string,Border> keys=new Dictionary<string,Border>();
         private readonly CheckBox mixerStartup=new CheckBox { Content="Запускать установленный микшер вместе с HUB" };
         private string selected,capturing;
-        private bool updating;
+        private bool updating,closed;
         internal ControlsWindow(ThemeStore themeStore,ControlsStore controlStore)
         {
-            themes=themeStore;controls=controlStore;Title="HUB ReFIX — управление";Width=620;Height=820;MinWidth=530;MinHeight=500;
+            themes=themeStore;controls=controlStore;Title="HUB ReFIX — управление";
+            Width=Math.Min(1120,SystemParameters.WorkArea.Width);Height=Math.Min(720,SystemParameters.WorkArea.Height);MinWidth=Math.Min(960,Width);MinHeight=Math.Min(520,Height);
             WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;ResizeMode=ResizeMode.CanResizeWithGrip;WindowStartupLocation=WindowStartupLocation.CenterOwner;
             Ui.Styles(this);
             frame=new Border { Margin=new Thickness(18),BorderThickness=new Thickness(1) };frame.SetResourceReference(BackgroundProperty,"Hub.Background");frame.SetResourceReference(BorderBrushProperty,"Hub.Border");Content=frame;
@@ -43,11 +44,6 @@ namespace ReFix.Hub
                 if(group!=previous){TextBlock heading=Ui.Text(group,14,"Hub.Foreground");heading.Margin=new Thickness(0,12,0,8);content.Children.Add(heading);previous=group;}
                 content.Children.Add(ActionRow(action));
             }
-            Border line=new Border { Height=1,Margin=new Thickness(0,18,0,12) };line.SetResourceReference(BackgroundProperty,"Hub.Border");content.Children.Add(line);
-            content.Children.Add(Ui.Text("Раскладка клавиатуры",15,"Hub.Foreground"));
-            TextBlock physical=Ui.Text("Цветом отмечены назначенные клавиши. Выбранное сочетание выделено ярче. Латинские и русские буквы обозначают одну физическую клавишу.",11,"Hub.Muted");physical.Margin=new Thickness(0,6,0,10);content.Children.Add(physical);
-            content.Children.Add(BuildKeyboard());
-            TextBlock standard=Ui.Text("Во время ввода: Esc — отменить, Backspace / Delete — убрать назначение. В микшере стрелки меняют громкость, Tab переключает элементы — это стандартное управление ползунками.",11,"Hub.Muted");standard.Margin=new Thickness(0,12,0,12);content.Children.Add(standard);
             mixerStartup.Margin=new Thickness(0,12,0,10);mixerStartup.Click+=delegate
             {
                 if(updating)return;try{ControlsProfile p=controls.Current;p.StartMixerWithHub=mixerStartup.IsChecked==true;controls.Save(p);notice.Text="Настройка запуска сохранена.";}catch(Exception ex){notice.Text=ex.Message;Refresh();}
@@ -56,11 +52,18 @@ namespace ReFix.Hub
             {
                 try{capturing=null;controls.ResetDefaults();foreach(var entry in typedAssignments)entry.Value.Text=controls.Current.Get(entry.Key);Refresh();notice.Text="Стандартные назначения восстановлены.";}catch(Exception ex){notice.Text=ex.Message;}
             },false);reset.HorizontalAlignment=HorizontalAlignment.Left;reset.Margin=new Thickness(0,6,0,12);content.Children.Add(reset);
-            ScrollViewer scroll=new ScrollViewer { Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Padding=new Thickness(0,0,8,0) };Grid.SetRow(scroll,1);layout.Children.Add(scroll);
+            Grid workspace=new Grid();workspace.ColumnDefinitions.Add(new ColumnDefinition());workspace.ColumnDefinitions.Add(new ColumnDefinition());Grid.SetRow(workspace,1);layout.Children.Add(workspace);
+            ScrollViewer scroll=new ScrollViewer { Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Padding=new Thickness(0,0,8,0),Margin=new Thickness(0,0,20,0) };workspace.Children.Add(scroll);
+            Border keyboardPanel=new Border { BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(8),Padding=new Thickness(14) };keyboardPanel.SetResourceReference(BorderBrushProperty,"Hub.Border");Grid.SetColumn(keyboardPanel,1);workspace.Children.Add(keyboardPanel);
+            Grid keyboardLayout=new Grid();keyboardLayout.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto });keyboardLayout.RowDefinitions.Add(new RowDefinition());keyboardLayout.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto });keyboardPanel.Child=keyboardLayout;
+            StackPanel keyboardHeading=new StackPanel();keyboardHeading.Children.Add(Ui.Text("Раскладка клавиатуры",18,"Hub.Foreground"));
+            TextBlock physical=Ui.Text("Цветом отмечены назначенные клавиши. Выбранное сочетание выделено ярче. Латинские и русские буквы обозначают одну физическую клавишу.",11,"Hub.Muted");physical.Margin=new Thickness(0,8,0,14);keyboardHeading.Children.Add(physical);keyboardLayout.Children.Add(keyboardHeading);
+            Viewbox keyboard=new Viewbox { Child=BuildKeyboard(),Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,VerticalAlignment=VerticalAlignment.Top };Grid.SetRow(keyboard,1);keyboardLayout.Children.Add(keyboard);
+            TextBlock standard=Ui.Text("Во время ввода: Esc — отменить, Backspace / Delete — убрать назначение. В микшере стрелки меняют громкость, Tab переключает элементы — это стандартное управление ползунками.",11,"Hub.Muted");standard.Margin=new Thickness(0,14,0,0);Grid.SetRow(standard,2);keyboardLayout.Children.Add(standard);
             notice.Margin=new Thickness(0,14,0,0);Grid.SetRow(notice,2);layout.Children.Add(notice);
             PreviewKeyDown+=Capture;
             themes.Changed+=ThemeChanged;controls.Changed+=BindingsChanged;controls.RuntimeChanged+=BindingsChanged;
-            Closed+=delegate{themes.Changed-=ThemeChanged;controls.Changed-=BindingsChanged;controls.RuntimeChanged-=BindingsChanged;};
+            Closed+=delegate{closed=true;themes.Changed-=ThemeChanged;controls.Changed-=BindingsChanged;controls.RuntimeChanged-=BindingsChanged;};
             SizeChanged+=delegate{layers.Clip=new RectangleGeometry(new Rect(0,0,layers.ActualWidth,layers.ActualHeight),frame.CornerRadius.TopLeft,frame.CornerRadius.TopLeft);ApplyTheme();};
             ApplyTheme();Refresh();
         }
@@ -80,7 +83,7 @@ namespace ReFix.Hub
         }
         private UIElement BuildKeyboard()
         {
-            StackPanel keyboard=new StackPanel();
+            StackPanel keyboard=new StackPanel { Width=480 };
             string[][] rows={new[]{"Esc","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12"},new[]{"1","2","3","4","5","6","7","8","9","0"},new[]{"Q/Й","W/Ц","E/У","R/К","T/Е","Y/Н","U/Г","I/Ш","O/Щ","P/З"},new[]{"A/Ф","S/Ы","D/В","F/А","G/П","H/Р","J/О","K/Л","L/Д"},new[]{"Z/Я","X/Ч","C/С","V/М","B/И","N/Т","M/Ь","Enter"},new[]{"Ctrl","Alt","Shift","Win","Space","Left","Down","Up","Right"}};
             var allRows=new List<string[]>(rows);
             allRows.Insert(1,new[]{"F13","F14","F15","F16","F17","F18","F19","F20","F21","F22","F23","F24"});
@@ -140,7 +143,7 @@ namespace ReFix.Hub
             }
         }
         private void ApplyTheme(){Ui.Apply(this,themes.Current,frame,image);}
-        private void ThemeChanged(object sender,EventArgs e){if(!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(delegate{ApplyTheme();Refresh();}));}
-        private void BindingsChanged(object sender,EventArgs e){if(!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(Refresh));}
+        private void ThemeChanged(object sender,EventArgs e){if(!closed&&!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(delegate{if(!closed){ApplyTheme();Refresh();}}));}
+        private void BindingsChanged(object sender,EventArgs e){if(!closed&&!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(delegate{if(!closed)Refresh();}));}
     }
 }
