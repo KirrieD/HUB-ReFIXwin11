@@ -24,8 +24,8 @@ namespace QuietMixer
         [DllImport("user32.dll")] internal static extern IntPtr WindowFromPoint(Point point);
         [DllImport("user32.dll")] internal static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
         [DllImport("user32.dll")] internal static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr wp, IntPtr lp);
-        [DllImport("user32.dll")] internal static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint key);
-        [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(IntPtr hwnd, int id);
+
+
         [DllImport("user32.dll")] internal static extern bool GetCursorPos(out Point point);
         [DllImport("user32.dll")] internal static extern IntPtr MonitorFromPoint(Point point, uint flags);
         [DllImport("user32.dll", CharSet=CharSet.Unicode)] internal static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);

@@ -1,0 +1,35 @@
+{
+  "SchemaVersion": 1,
+  "Modules": [
+    {
+      "Id": "quiet-mixer",
+      "Name": "Микшер громкости",
+      "Description": "Громкость устройства и приложений, настраиваемая горячая клавиша.",
+      "Version": "1.1.0",
+      "Kind": "process",
+      "EntryPoint": "QuietMixer.exe",
+      "PackageUrl": "https://github.com/KirrieD/HUB-ReFIXwin11/releases/download/v1.1.0/quiet-mixer-1.1.0.zip",
+      "Sha256": "91f72689b8ffb28729890942e78078e91a5dfd0c9288abbf086a2353fd5dad17",
+      "Preview": "mixer",
+      "MinHubVersion": "1.1.0",
+      "EnableArgument": "",
+      "DisableArgument": "",
+      "StatusArgument": ""
+    },
+    {
+      "Id": "quick-note",
+      "Name": "Быстрая заметка",
+      "Description": "Локальная заметка с общей темой и сохранением при скрытии.",
+      "Version": "1.1.0",
+      "Kind": "process",
+      "EntryPoint": "QuickNote.exe",
+      "PackageUrl": "https://github.com/KirrieD/HUB-ReFIXwin11/releases/download/v1.1.0/quick-note-1.1.0.zip",
+      "Sha256": "f8873d8c597a8538e8fc7de0b6b80e5e161b0e684d543078db27fc32e4a19f98",
+      "Preview": "notes",
+      "MinHubVersion": "1.1.0",
+      "EnableArgument": "",
+      "DisableArgument": "",
+      "StatusArgument": ""
+    }
+  ]
+}

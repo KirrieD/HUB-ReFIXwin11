@@ -19,6 +19,10 @@ namespace ReFix.Tests
         private static int Main()
         {
             Group("shared SDK",delegate{SharedTests.Run(Report);});
+            Group("keyboard controls",delegate{ControlsTests.Run(Report);});
+            Group("legacy mixer migration",delegate{MigrationTests.Run(Report);});
+            Group("bootstrap and setup",delegate{BootstrapTests.Run(Report);});
+            Group("verified self update",delegate{UpdateTests.Run(Report);});
             Group("backend",delegate{BackendTests.Run(Report);});
             Group("real module lifecycle",delegate{BackendTests.RunIntegration(Report);});
             Group("modeless editor and live theme",UiTest);
@@ -50,6 +54,14 @@ namespace ReFix.Tests
                         Color a=((SolidColorBrush)hub.Resources["Hub.Accent"]).Color,b=((SolidColorBrush)hub.StyleEditor.Resources["Hub.Accent"]).Color;
                         if(a.R!=198 || a.G!=64 || a.B!=114 || a!=b)throw new Exception("Theme must update both real windows: HUB="+a+" Editor="+b);
                         if(hub.Opacity!=1 || hub.StyleEditor.Opacity!=1)throw new Exception("Background alpha must not fade text");
+                        hub.OpenControls();Pump();if(!hub.IsEnabled||hub.ControlsEditor==null||hub.ControlsEditor.Owner!=hub)throw new Exception("Controls must be modeless");
+                        if(((SolidColorBrush)hub.ControlsEditor.Resources["Hub.Accent"]).Color!=a)throw new Exception("Controls must follow current shared theme");
+                        TextBox binding=Find<TextBox>(hub.ControlsEditor,"Сочетание: Скрыть HUB");if(binding==null)throw new Exception("Editable binding input missing");binding.Text="Backspace";
+                        binding.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(binding),0,Key.Enter){RoutedEvent=Keyboard.KeyDownEvent});
+                        using(ControlsStore check=new ControlsStore(root))if(check.Current.Get("hub.hide")!="Backspace")throw new Exception("Typed assignment was not saved");
+                        TextBox focusedSearch=Find<TextBox>(hub,"Поиск инструментов");focusedSearch.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(focusedSearch),0,Key.Back){RoutedEvent=Keyboard.PreviewKeyDownEvent});
+                        if(hub.IsVisible||hub.ControlsEditor.IsVisible)throw new Exception("Reassigned hide must work before text input consumes key");
+                        Report("modeless controls, manual key assignment and preview key routing",true);
                         hub.HideHub();if(hub.StatusTimerRunning || hub.StyleEditor.IsVisible)throw new Exception("Hidden windows must stop UI polling");
                         Report("modeless editor, shared live colors, opaque text, no hidden status timer",true);
                     }

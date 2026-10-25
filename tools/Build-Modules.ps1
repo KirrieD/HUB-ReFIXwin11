@@ -13,12 +13,15 @@ $refs += '/reference:System.dll','/reference:System.Core.dll','/reference:System
 $packages = Join-Path $Artifacts 'packages'
 New-Item -ItemType Directory -Path $packages -Force | Out-Null
 $modules = @(
-    @{ Id='quiet-mixer'; Name='Микшер громкости'; Description='Громкость устройства и приложений, горячая клавиша Ctrl+Alt+V.'; Source='QuietMixer'; Exe='QuietMixer.exe'; Preview='mixer' },
+    @{ Id='quiet-mixer'; Name='Микшер громкости'; Description='Громкость устройства и приложений, настраиваемая горячая клавиша.'; Source='QuietMixer'; Exe='QuietMixer.exe'; Preview='mixer' },
     @{ Id='quick-note'; Name='Быстрая заметка'; Description='Локальная заметка с общей темой и сохранением при скрытии.'; Source='QuickNote'; Exe='QuickNote.exe'; Preview='notes' }
 )
+$versionText = Get-Content -LiteralPath (Join-Path $root 'src\Shared\ProductInfo.cs') -Raw
+if ($versionText -notmatch 'public const string Version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"') { throw 'Missing canonical product version' }
+$version = $Matches[1]
 $catalog = @()
 foreach ($module in $modules) {
-    $version = '1.0.0'
+
     $stage = Join-Path $Artifacts ('module-build\' + $module.Id)
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     $sources = @(Get-ChildItem -LiteralPath (Join-Path $root ('src\Modules\' + $module.Source)) -Filter '*.cs' | ForEach-Object FullName)
@@ -27,7 +30,7 @@ foreach ($module in $modules) {
     & $compiler /nologo /utf8output /langversion:5 /target:winexe /optimize+ /platform:anycpu "/win32manifest:$manifest" "/out:$stage\$($module.Exe)" @refs @sources
     if ($LASTEXITCODE -ne 0) { throw "Module build failed: $($module.Id)" }
     Copy-Item -LiteralPath $shared -Destination $stage -Force
-    $metadata = [ordered]@{ Id=$module.Id; Name=$module.Name; Description=$module.Description; Version=$version; Kind='process'; EntryPoint=$module.Exe; PackageUrl=''; Sha256=''; Preview=$module.Preview; MinHubVersion='1.0.0'; EnableArgument=''; DisableArgument=''; StatusArgument='' }
+    $metadata = [ordered]@{ Id=$module.Id; Name=$module.Name; Description=$module.Description; Version=$version; Kind='process'; EntryPoint=$module.Exe; PackageUrl=''; Sha256=''; Preview=$module.Preview; MinHubVersion=$version; EnableArgument=''; DisableArgument=''; StatusArgument='' }
     $metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'module.json') -Encoding UTF8
     $zip = Join-Path $packages ($module.Id + '-' + $version + '.zip')
     # Use an explicit list so stale compiler outputs cannot enter a package.

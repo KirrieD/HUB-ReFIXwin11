@@ -9,8 +9,12 @@ internal static class ModuleThemeTests
     [STAThread]
     private static int Main()
     {
+        string originalRoot=Environment.GetEnvironmentVariable("REFIX_DATA_ROOT");
+        string isolatedRoot=System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"ModuleAllTests."+Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("REFIX_DATA_ROOT",isolatedRoot);
         try
         {
+            VerifyControls();
             ThemeProfile first=new ThemeProfile { Mode="Custom", Accent="#123456", BackgroundOpacity=.4,ImageBlur=8,GlowOpacity=.5,GlowRadius=9,CornerRadius=16 };
             QuietMixer.MixerWindow window=new QuietMixer.MixerWindow(first);
             StackPanel rows=(StackPanel)typeof(QuietMixer.MixerWindow).GetField("rows",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(window);
@@ -46,15 +50,48 @@ internal static class ModuleThemeTests
                 ReFix.QuickNote.NoteWindow reopened=new ReFix.QuickNote.NoteWindow(second);
                 TextBox restored=(TextBox)typeof(ReFix.QuickNote.NoteWindow).GetField("editor",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(reopened);
                 Require(restored.Text==text.Text,"Quick Note must restore saved text");
+                note.Dispose();reopened.Dispose();
                 System.IO.File.Delete(noteFile);
                 System.IO.Directory.Delete(System.IO.Path.GetDirectoryName(noteFile));
-                System.IO.Directory.Delete(Paths.Root);
+                System.IO.Directory.Delete(Paths.Root,true);
             } finally { Environment.SetEnvironmentVariable("REFIX_DATA_ROOT",priorRoot); }
             window.Close();
             Console.WriteLine("PASS: hidden theme, preserved rows/volume, menu resources, XAML templates, both module alpha/glow/blur/corners");
             return 0;
         }
         catch(Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        finally{Environment.SetEnvironmentVariable("REFIX_DATA_ROOT",originalRoot);if(System.IO.Directory.Exists(isolatedRoot))System.IO.Directory.Delete(isolatedRoot,true);}
+    }
+    private static void VerifyControls()
+    {
+        string root=System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"ModuleControls."+Guid.NewGuid().ToString("N"));
+        string prior=Environment.GetEnvironmentVariable("REFIX_DATA_ROOT");Environment.SetEnvironmentVariable("REFIX_DATA_ROOT",root);
+        try { using(var controls=new ControlsStore(root)) {
+            var signature=new[]{typeof(ThemeProfile),typeof(ControlsStore)};
+            var mixerConstructor=typeof(QuietMixer.MixerWindow).GetConstructor(BindingFlags.Instance|BindingFlags.NonPublic,null,signature,null);
+            var noteConstructor=typeof(ReFix.QuickNote.NoteWindow).GetConstructor(BindingFlags.Instance|BindingFlags.NonPublic,null,signature,null);
+            Require(mixerConstructor!=null&&noteConstructor!=null,"Both existing module windows must accept shared live controls");
+            var mixer=(QuietMixer.MixerWindow)mixerConstructor.Invoke(new object[]{new ThemeProfile(),controls});
+            var note=(ReFix.QuickNote.NoteWindow)noteConstructor.Invoke(new object[]{new ThemeProfile(),controls});
+            var rows=(StackPanel)typeof(QuietMixer.MixerWindow).GetField("rows",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(mixer);
+            var slider=new Slider{Value=37};rows.Children.Add(slider);
+            var editor=(TextBox)typeof(ReFix.QuickNote.NoteWindow).GetField("editor",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(note);editor.Text="Preserve unsaved note during controls updates";
+            controls.Assign("quick-note.save","Ctrl+Shift+S");controls.Assign("quiet-mixer.hide","Ctrl+Q");controls.Assign("quick-note.hide","Ctrl+Q");
+            var frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,new Action(delegate{frame.Continue=false;}));System.Windows.Threading.Dispatcher.PushFrame(frame);
+            Require(editor.Text=="Preserve unsaved note during controls updates"&&slider.Value==37&&rows.Children.Contains(slider),"Live controls must preserve note and volume state");
+            var noteStatus=(TextBlock)typeof(ReFix.QuickNote.NoteWindow).GetField("status",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(note);
+            var mixerStatus=(TextBlock)typeof(QuietMixer.MixerWindow).GetField("status",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(mixer);
+            DateTime until=DateTime.UtcNow.AddSeconds(3);while(DateTime.UtcNow<until&&!noteStatus.Text.Contains("Ctrl+Shift+S")){frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,new Action(delegate{frame.Continue=false;}));System.Windows.Threading.Dispatcher.PushFrame(frame);System.Threading.Thread.Sleep(10);}
+            Require(noteStatus.Text.Contains("Ctrl+Shift+S")&&mixerStatus.Text.Contains("Ctrl+Q"),"Existing window help must reflect changed bindings");
+            controls.Assign("quick-note.save","F21");controls.Assign("quiet-mixer.hide","F22");controls.Assign("quick-note.hide","F22");
+            using(var source=new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("Isolated local controls"){Width=0,Height=0})) {
+                var key=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.F21){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent};note.RaiseEvent(key);
+                Require(key.Handled&&System.IO.File.ReadAllText(System.IO.Path.Combine(root,"notes","quick-note.txt"))==editor.Text,"Rebound save must execute on the existing note window");
+                key=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.Escape){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent};mixer.RaiseEvent(key);Require(!key.Handled,"Old Escape binding must stop executing immediately");
+                key=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.F22){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent};mixer.RaiseEvent(key);Require(key.Handled,"Rebound hide must execute on existing mixer");
+            }
+            mixer.Close();((IDisposable)(object)note).Dispose();
+        }}finally{Environment.SetEnvironmentVariable("REFIX_DATA_ROOT",prior);if(System.IO.Directory.Exists(root))System.IO.Directory.Delete(root,true);}
     }
     private static void VerifySurface(Window window)
     {

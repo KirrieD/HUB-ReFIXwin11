@@ -16,6 +16,9 @@ namespace ReFix.Hub
     {
         private readonly ThemeStore themes;
         private readonly ModuleManager manager;
+        private readonly ControlsStore controls;
+        private readonly bool ownsControls;
+        private readonly TextBlock shortcut=Ui.Text("",11,"Hub.Muted");
         private readonly StackPanel cards=new StackPanel();
         private readonly TextBlock notice=Ui.Text("Локальный каталог готов",11,"Hub.Muted");
         private readonly TextBlock summary=Ui.Text("",12,"Hub.Muted");
@@ -25,11 +28,13 @@ namespace ReFix.Hub
         private readonly Border image;
         private readonly List<ModuleCard> views=new List<ModuleCard>();
         private StyleWindow editor;
+        private ControlsWindow controlsEditor;
         private bool exiting,refreshing;
         private string filter="all";
-        internal HubWindow(ThemeStore store,ModuleManager modules)
+        internal HubWindow(ThemeStore store,ModuleManager modules,ControlsStore bindings=null,Action checkUpdates=null)
         {
             themes=store; manager=modules; Title="HUB ReFIX — расширения Windows 11";
+            ownsControls=bindings==null;controls=bindings??new ControlsStore(Paths.Root);
             Width=1060; Height=720; MinWidth=840; MinHeight=480; WindowStartupLocation=WindowStartupLocation.CenterScreen;
             WindowStyle=WindowStyle.None; AllowsTransparency=true; Background=System.Windows.Media.Brushes.Transparent;
             ResizeMode=ResizeMode.CanResizeWithGrip; FontFamily=new System.Windows.Media.FontFamily("Segoe UI Variable, Segoe UI");
@@ -47,10 +52,11 @@ namespace ReFix.Hub
             AddNav(nav,"Все инструменты","all"); AddNav(nav,"Установленные","installed"); AddNav(nav,"Расширения","process"); AddNav(nav,"Фиксы Windows","fix");
             Border divider=new Border { Height=1,Margin=new Thickness(0,20,0,16) }; divider.SetResourceReference(Border.BackgroundProperty,"Hub.Border"); nav.Children.Add(divider);
             Button style=Ui.Button("Оформление",OpenStyles,false); style.HorizontalContentAlignment=HorizontalAlignment.Left; nav.Children.Add(style);
+            Button manage=Ui.Button("Управление",OpenControls,false);manage.Margin=new Thickness(0,8,0,0);nav.Children.Add(manage);
             Button refresh=Ui.Button("Обновить каталог",delegate { Run(RefreshCatalog); },false); refresh.Margin=new Thickness(0,8,0,0); nav.Children.Add(refresh);
             CheckBox autorun=new CheckBox { Content="Автозапуск",IsChecked=Startup.Enabled,Margin=new Thickness(2,18,0,4) };
             autorun.Click+=delegate { try { Startup.Enabled=autorun.IsChecked==true; } catch(Exception ex) { SetNotice(ex.Message); autorun.IsChecked=Startup.Enabled; } }; nav.Children.Add(autorun);
-            TextBlock shortcut=Ui.Text("Ctrl + Alt + H\nКрестик скрывает HUB",11,"Hub.Muted"); shortcut.Margin=new Thickness(2,14,0,0); nav.Children.Add(shortcut);
+            shortcut.Margin=new Thickness(2,14,0,0); nav.Children.Add(shortcut);RefreshControls();
             Grid main=new Grid { Margin=new Thickness(12,18,22,0) }; main.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto }); main.RowDefinitions.Add(new RowDefinition { Height=new GridLength(32) }); main.RowDefinitions.Add(new RowDefinition()); Grid.SetRow(main,1); Grid.SetColumn(main,1); shell.Children.Add(main);
             DockPanel heading=new DockPanel { Margin=new Thickness(0,0,0,12) };
             search.HorizontalAlignment=HorizontalAlignment.Right; DockPanel.SetDock(search,Dock.Right); heading.Children.Add(search); heading.Children.Add(Ui.Text("Инструменты",25,"Hub.Foreground")); main.Children.Add(heading);
@@ -58,13 +64,16 @@ namespace ReFix.Hub
             Grid.SetRow(summary,1); main.Children.Add(summary);
             ScrollViewer scroll=new ScrollViewer { Content=cards,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Padding=new Thickness(0,0,8,0) }; Grid.SetRow(scroll,2); main.Children.Add(scroll);
             DockPanel footer=new DockPanel { Margin=new Thickness(20,8,22,6) }; Grid.SetRow(footer,2); Grid.SetColumnSpan(footer,2); shell.Children.Add(footer);
-            TextBlock repo=Ui.Text("KirrieD / HUB-ReFIXwin11",11,"Hub.Muted"); repo.HorizontalAlignment=HorizontalAlignment.Right; DockPanel.SetDock(repo,Dock.Right); footer.Children.Add(repo); footer.Children.Add(notice);
+            TextBlock repo=Ui.Text("v"+ProductInfo.Version+" · KirrieD / HUB-ReFIXwin11",11,"Hub.Muted"); repo.HorizontalAlignment=HorizontalAlignment.Right; DockPanel.SetDock(repo,Dock.Right); footer.Children.Add(repo); footer.Children.Add(notice);
+            if(checkUpdates!=null){Button update=Ui.Button("Проверить обновления",checkUpdates,false);update.Padding=new Thickness(8,2,8,2);update.MinHeight=22;update.FontSize=10;update.Margin=new Thickness(10,0,12,0);DockPanel.SetDock(update,Dock.Right);footer.Children.Insert(1,update);}
+            notice.TextWrapping=TextWrapping.NoWrap;notice.TextTrimming=TextTrimming.CharacterEllipsis;
             statusTimer=new DispatcherTimer { Interval=TimeSpan.FromSeconds(2) }; statusTimer.Tick+=delegate { Run(RefreshStates); };
             IsVisibleChanged+=delegate { if(IsVisible) { statusTimer.Start(); Run(RefreshStates); } else statusTimer.Stop(); };
             Closing+=delegate(object sender,CancelEventArgs e) { if(!exiting) { e.Cancel=true; HideHub(); } };
-            KeyDown+=delegate(object sender,KeyEventArgs e) { if(e.Key==Key.Escape) HideHub(); };
+            PreviewKeyDown+=delegate(object sender,KeyEventArgs e) { if(KeyChord.Parse(controls.Current.Get("hub.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)){HideHub();e.Handled=true;} };
             themes.Changed+=ThemeChanged; manager.Changed+=ModulesChanged;
-            Closed+=delegate { statusTimer.Stop(); themes.Changed-=ThemeChanged; manager.Changed-=ModulesChanged; foreach(ModuleCard card in views) card.Dispose(); };
+            controls.Changed+=ControlsChanged;controls.RuntimeChanged+=ControlsChanged;
+            Closed+=delegate { statusTimer.Stop(); themes.Changed-=ThemeChanged; manager.Changed-=ModulesChanged;controls.Changed-=ControlsChanged;controls.RuntimeChanged-=ControlsChanged;if(ownsControls)controls.Dispose(); foreach(ModuleCard card in views) card.Dispose(); };
             SizeChanged+=delegate { layers.Clip=new System.Windows.Media.RectangleGeometry(new Rect(0,0,layers.ActualWidth,layers.ActualHeight),frame.CornerRadius.TopLeft,frame.CornerRadius.TopLeft); ApplyTheme(); };
             ApplyTheme(); Rebuild();
         }
@@ -111,7 +120,7 @@ namespace ReFix.Hub
             foreach(ModuleCard card in views) card.Dispose(); views.Clear(); cards.Children.Clear();
             foreach(ModuleView module in manager.Modules)
             {
-                ModuleCard card=new ModuleCard(module,manager,SetNotice); views.Add(card); cards.Children.Add(card);
+                ModuleCard card=new ModuleCard(module,manager,SetNotice,controls); views.Add(card); cards.Children.Add(card);
             }
             if(views.Count==0) cards.Children.Add(Ui.Text("В каталоге пока нет инструментов. Обновите каталог или добавьте пакет в репозиторий.",15,"Hub.Muted"));
             foreach(ModuleCard card in views)card.ApplyPreview(themes.Current);
@@ -141,9 +150,17 @@ namespace ReFix.Hub
             editor.Show(); editor.Activate();
         }
         internal StyleWindow StyleEditor { get { return editor; } }
+        internal void OpenControls()
+        {
+            if(controlsEditor==null){controlsEditor=new ControlsWindow(themes,controls);controlsEditor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(controlsEditor);controlsEditor.Closed+=delegate{controlsEditor=null;};}
+            controlsEditor.Show();controlsEditor.Activate();
+        }
+        internal ControlsWindow ControlsEditor {get{return controlsEditor;}}
+        private void ControlsChanged(object sender,EventArgs e){if(!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(RefreshControls));}
+        private void RefreshControls(){HotkeyRuntimeStatus state=controls.GetRuntime("hub.toggle");string key=state==null?controls.Current.Get("hub.toggle"):state.Actual;shortcut.Text=(string.IsNullOrEmpty(key)?"Показ через трей":key)+"\nКрестик скрывает HUB";}
         internal void ShowHub() { Show(); WindowState=WindowState.Normal; Native.SetForegroundWindow(new WindowInteropHelper(this).Handle); Activate(); }
-        internal void HideHub() { if(editor!=null) editor.Hide(); Hide(); }
-        internal void Exit() { exiting=true; if(editor!=null) editor.Close(); Close(); }
+        internal void HideHub() { if(editor!=null) editor.Hide();if(controlsEditor!=null)controlsEditor.Hide(); Hide(); }
+        internal void Exit() { exiting=true; if(editor!=null) editor.Close();if(controlsEditor!=null)controlsEditor.Close(); Close(); }
         internal bool StatusTimerRunning { get { return statusTimer.IsEnabled; } }
     }
 
@@ -151,13 +168,15 @@ namespace ReFix.Hub
     {
         internal readonly ModuleView View;
         private readonly ModuleManager manager;
+        private readonly ControlsStore controls;
         private readonly Action<string> notify;
         private readonly TextBlock state,details,version;
         private readonly Button primary,open,update;
         private readonly ModulePreview previewWindow;
-        internal ModuleCard(ModuleView module,ModuleManager service,Action<string> notice)
+        internal ModuleCard(ModuleView module,ModuleManager service,Action<string> notice,ControlsStore bindings)
         {
             View=module; manager=service; notify=notice;
+            controls=bindings;
             Padding=new Thickness(16); Margin=new Thickness(0,0,0,12); BorderThickness=new Thickness(1); CornerRadius=new CornerRadius(10);
             SetResourceReference(BackgroundProperty,"Hub.Surface"); SetResourceReference(BorderBrushProperty,"Hub.Border");
             Grid layout=new Grid(); layout.ColumnDefinitions.Add(new ColumnDefinition()); layout.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(236) }); Child=layout;
@@ -186,7 +205,13 @@ namespace ReFix.Hub
             open.Visibility=View.State=="ON" && View.Manifest.Kind!="fix"?Visibility.Visible:Visibility.Collapsed;
             update.Visibility=!string.IsNullOrEmpty(View.InstalledVersion) && View.InstalledVersion!=View.Manifest.Version?Visibility.Visible:Visibility.Collapsed; update.IsEnabled=!View.IsBusy && View.State!="ON";
         }
-        private void InvokePrimary() { Run(delegate { return View.State=="NO"?manager.InstallAsync(View):View.State=="ON"?manager.StopAsync(View):manager.StartAsync(View); }); }
+        private void InvokePrimary(){Run(async delegate
+        {
+            if(View.State=="NO"){await manager.InstallAsync(View);return;}
+            bool enable=View.State!="ON";if(enable)await manager.StartAsync(View);else await manager.StopAsync(View);
+            if(View.Manifest.Id=="quiet-mixer"){ControlsProfile profile=controls.Current;profile.StartMixerWithHub=enable;controls.Save(profile);}
+            if(enable&&View.Manifest.Kind=="process")await manager.ShowAsync(View);
+        });}
         internal void ApplyPreview(ThemeProfile profile){previewWindow.ApplyTheme(profile);}
         private async void Run(Func<Task> action) { try { await action(); notify("Готово: "+View.Manifest.Name); } catch(Exception ex) { notify(ex.Message); } finally { Update(); } }
         public void Dispose() { View.PropertyChanged-=Changed; }

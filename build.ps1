@@ -1,4 +1,4 @@
-param([switch]$Test,[switch]$BuildTests,[switch]$Package)
+﻿param([switch]$Test,[switch]$BuildTests,[switch]$Package)
 $ErrorActionPreference='Stop'
 $root=$PSScriptRoot
 $out=Join-Path $root 'artifacts'
@@ -15,13 +15,19 @@ function Compile([string]$target,[string[]]$files,[string[]]$extra){
 $shared=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Shared') -Filter '*.cs'|ForEach-Object FullName)
 Compile 'ReFix.Shared.dll' $shared @('/target:library')
 $hub=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Hub') -Filter '*.cs'|ForEach-Object FullName)
-Compile 'HUB-ReFIX.exe' $hub @('/target:winexe',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),('/win32manifest:'+(Join-Path $root 'app.manifest')))
+$engine=Join-Path $root 'src\UpdateHelper\UpdateEngine.cs'
+Compile 'HUB-ReFIX.Core.exe' @($hub+$engine) @('/target:winexe',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),('/win32manifest:'+(Join-Path $root 'app.manifest')))
+$bootstrap=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Bootstrap') -Filter '*.cs'|ForEach-Object FullName)
+Compile 'HUB-ReFIX.exe' $bootstrap @('/target:winexe',('/win32manifest:'+(Join-Path $root 'app.manifest')))
+$helper=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\UpdateHelper') -Filter '*.cs'|ForEach-Object FullName)
+Compile 'ReFix.UpdateHelper.exe' $helper @('/target:winexe',('/win32manifest:'+(Join-Path $root 'app.manifest')))
 Copy-Item -LiteralPath (Join-Path $root 'HUB-ReFIX.exe.config') -Destination $out -Force
+Copy-Item -LiteralPath (Join-Path $root 'HUB-ReFIX.Core.exe.config') -Destination $out -Force
 & (Join-Path $root 'tools\Build-Modules.ps1')
 if($LASTEXITCODE -ne 0){throw 'Module build failed'}
 if($Test -or $BuildTests){
     $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.cs'|ForEach-Object FullName)
-    Compile 'ReFix.Tests.exe' @($hub+$tests) @('/target:exe','/main:ReFix.Tests.Runner',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
+    Compile 'ReFix.Tests.exe' @($hub+$tests+$engine+(Join-Path $root 'src\Bootstrap\BundleAudit.cs')+(Join-Path $root 'src\Bootstrap\InstallFileTransaction.cs')) @('/target:exe','/main:ReFix.Tests.Runner',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
     if($Test){
         & (Join-Path $out 'ReFix.Tests.exe')
         if($LASTEXITCODE -ne 0){throw 'Tests failed'}

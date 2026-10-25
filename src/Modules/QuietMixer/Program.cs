@@ -77,27 +77,32 @@ namespace QuietMixer
             using(ShellListener listener=new ShellListener(source.Handle))
             using(Forms.NotifyIcon tray=new Forms.NotifyIcon())
             using(ThemeStore themes=new ThemeStore(Paths.Root))
+            using(ControlsStore controls=new ControlsStore(Paths.Root))
             {
-                Action show=delegate { if(popup==null) popup=new MixerWindow(themes.Current); popup.ShowAtCursor(); };
+                Action show=delegate { if(popup==null) popup=new MixerWindow(themes.Current,controls); popup.ShowAtCursor(); };
                 Action toggle=delegate { if(popup!=null && popup.IsVisible) popup.Hide(); else show(); };
+                using(GlobalKeyRegistration keys=new GlobalKeyRegistration(controls,"quiet-mixer.toggle",source.Handle,0x5100,toggle))
+                {
                 uint taskbarCreated=Native.RegisterWindowMessage("TaskbarCreated");
                 source.AddHook(delegate(IntPtr hwnd,int msg,IntPtr wp,IntPtr lp,ref bool handled)
                 {
-                    if(msg==Native.ToggleMessage || msg==0x312) { toggle(); handled=true; }
+                    if(keys.ProcessMessage(msg,wp)) { handled=true; return IntPtr.Zero; }
+                    if(msg==Native.ToggleMessage) { toggle(); handled=true; }
                     if(msg==Native.ExitMessage) { app.Shutdown(); handled=true; }
                     if(msg==0x7E || msg==0x1A) listener.Refresh();
                     if((uint)msg==taskbarCreated) { tray.Visible=false; tray.Visible=true; listener.Refresh(); }
                     return IntPtr.Zero;
                 });
-                bool hotkey=Native.RegisterHotKey(source.Handle,1,0x4003,0x56);
+
                 tray.Icon=System.Drawing.SystemIcons.Application;
-                tray.Text="QuietMixer · Ctrl+Alt+V";
+                Action updateLabel=delegate {var live=controls.GetRuntime("quiet-mixer.toggle");string key=live==null?controls.Current.Get("quiet-mixer.toggle"):live.Actual;string label="QuietMixer"+(key!=""?" · "+key:"");tray.Text=label.Length>63?label.Substring(0,63):label;};updateLabel();
+                EventHandler controlsChanged=delegate{app.Dispatcher.BeginInvoke(updateLabel);};controls.Changed+=controlsChanged;controls.RuntimeChanged+=controlsChanged;
                 Forms.ContextMenuStrip menu=new Forms.ContextMenuStrip();
                 menu.Items.Add("Открыть микшер",null,delegate { show(); });
                 menu.Items.Add("Выйти",null,delegate { app.Shutdown(); });
                 tray.ContextMenuStrip=menu; tray.MouseClick+=delegate(object sender,Forms.MouseEventArgs e) { if(e.Button==Forms.MouseButtons.Left) toggle(); };
                 tray.Visible=true;
-                app.Exit+=delegate { tray.Visible=false; if(hotkey) Native.UnregisterHotKey(source.Handle,1); if(popup!=null) popup.Close(); menu.Dispose(); };
+                app.Exit+=delegate { tray.Visible=false;  if(popup!=null) popup.Close(); menu.Dispose(); };
                 EventHandler changed=delegate { app.Dispatcher.BeginInvoke(new Action(delegate { if(popup!=null) popup.ApplyTheme(themes.Current); })); };
                 themes.Changed+=changed;
                 using(ModuleRuntime runtime=new ModuleRuntime("quiet-mixer",
@@ -106,12 +111,14 @@ namespace QuietMixer
                 {
                 runtime.Start();
                 if(Array.IndexOf(args,"--background")<0) app.Dispatcher.BeginInvoke(show, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-                if(!listener.HookAvailable || !hotkey)
+                var hotkeyStatus=controls.GetRuntime("quiet-mixer.toggle");
+                if(!listener.HookAvailable || (hotkeyStatus!=null&&!String.IsNullOrEmpty(hotkeyStatus.Error)))
                 {
-                    tray.ShowBalloonTip(6000,"QuietMixer",!listener.HookAvailable?"Не удалось включить перехват динамика. Открывайте микшер через этот значок.":"Ctrl+Alt+V занято другой программой. Микшер доступен через значок в трее.",Forms.ToolTipIcon.Info);
+                    tray.ShowBalloonTip(6000,"QuietMixer",!listener.HookAvailable?"Не удалось включить перехват динамика. Открывайте микшер через этот значок.":"Горячая клавиша занята другой программой. Микшер доступен через значок в трее.",Forms.ToolTipIcon.Info);
                 }
                 app.Run();
-                themes.Changed-=changed;
+                themes.Changed-=changed;controls.Changed-=controlsChanged;controls.RuntimeChanged-=controlsChanged;
+                }
                 }
             }
         }

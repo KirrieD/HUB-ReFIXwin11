@@ -16,6 +16,7 @@ public static class BackendTests {
   try {
    var manifest=new ModuleManifest {Id="sample",Name="Sample",Description="Test",Version="1.0.0",Kind="process",EntryPoint="sample.exe",Preview="notes"};
    Action<string,Action> test=(name,body)=>{try{body();report(name,true);}catch(Exception e){Console.WriteLine(e);report(name,false);}};
+   test("network catalogue accepts UTF8 BOM",()=>{string json="\uFEFF"+new JavaScriptSerializer().Serialize(new CatalogDocument{SchemaVersion=1,Modules=new List<ModuleManifest>{manifest}});var parser=typeof(ModuleManager).GetMethod("ReadCatalog",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static);var parsed=(CatalogDocument)parser.Invoke(null,new object[]{json});if(parsed.Modules.Count!=1||parsed.Modules[0].Id!="sample")throw new Exception("Catalogue lost fields");});
    test("reject traversal manifest",()=> { manifest.Id="../escape"; ExpectReject(()=>manifest.Validate());manifest.Id="sample"; });
    test("reject nonrepository downloads",()=> {manifest.PackageUrl="https://example.org/test.zip";ExpectReject(()=>manifest.Validate());manifest.PackageUrl=null;});
    test("process manifests do not require fix arguments",()=>{manifest.EnableArgument="";manifest.DisableArgument="";manifest.StatusArgument="";manifest.Validate();});

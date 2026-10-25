@@ -5,6 +5,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using ReFix.Shared;
 using ReFix.Modules;
 
@@ -22,9 +23,15 @@ namespace ReFix.QuickNote
                 Paths.Ensure();
                 Application app=new Application { ShutdownMode=ShutdownMode.OnExplicitShutdown };
                 using(ThemeStore themes=new ThemeStore(Paths.Root))
+                using(ControlsStore controls=new ControlsStore(Paths.Root))
+                using(HwndSource source=new HwndSource(new HwndSourceParameters(ModuleRuntime.PipeName("quick-note")+".Keys"){Width=0,Height=0,WindowStyle=unchecked((int)0x80000000)}))
                 {
-                    NoteWindow window=new NoteWindow(themes.Current);
+                    using(NoteWindow window=new NoteWindow(themes.Current,controls))
+                    {
                     Action show=delegate { window.Show(); window.Activate(); };
+                    using(GlobalKeyRegistration keys=new GlobalKeyRegistration(controls,"quick-note.toggle",source.Handle,0x5200,delegate{if(window.IsVisible){window.Save();window.Hide();}else show();}))
+                    {
+                    source.AddHook(delegate(IntPtr h,int msg,IntPtr w,IntPtr l,ref bool handled){handled=keys.ProcessMessage(msg,w);return IntPtr.Zero;});
                     EventHandler changed=delegate { app.Dispatcher.BeginInvoke(new Action(delegate { window.ApplyTheme(themes.Current); })); };
                     themes.Changed+=changed;
                     using(ModuleRuntime runtime=new ModuleRuntime("quick-note",
@@ -37,11 +44,12 @@ namespace ReFix.QuickNote
                         app.Run();
                     }
                     themes.Changed-=changed;
+                    }}
                 }
             }
         }
     }
-    internal sealed class NoteWindow : Window
+    internal sealed class NoteWindow : Window, IDisposable
     {
         private readonly TextBox editor=new TextBox();
         private readonly TextBlock status=new TextBlock();
@@ -49,8 +57,11 @@ namespace ReFix.QuickNote
         private bool dirty;
         private ThemedSurface surface;
         private ThemeProfile current;
-        internal NoteWindow(ThemeProfile profile)
+        readonly ControlsStore controls;readonly bool ownsControls;readonly EventHandler controlsChanged;bool disposed;
+        internal NoteWindow(ThemeProfile profile) : this(profile,null) {}
+        internal NoteWindow(ThemeProfile profile,ControlsStore controls)
         {
+            this.controls=controls??new ControlsStore(Paths.Root);ownsControls=controls==null;controlsChanged=delegate{Dispatcher.BeginInvoke(new Action(UpdateControlsHelp));};this.controls.Changed+=controlsChanged;
             Title="Быстрая заметка · ReFIX"; Width=390; Height=420;
             WindowStyle=WindowStyle.None; AllowsTransparency=true; ResizeMode=ResizeMode.NoResize;
             MinWidth=280; MinHeight=260; WindowStartupLocation=WindowStartupLocation.CenterScreen;
@@ -75,20 +86,22 @@ namespace ReFix.QuickNote
             editor.SetResourceReference(Control.FontSizeProperty,"Hub.FontSize");
             editor.MaxLength=1000000;
             if(File.Exists(path)) { try { editor.Text=File.ReadAllText(path,Encoding.UTF8); } catch(IOException) { status.Text="Не удалось прочитать заметку."; } }
-            editor.TextChanged+=delegate { dirty=true; status.Text="Изменено · Ctrl+S — сохранить"; };
+            editor.TextChanged+=delegate { dirty=true;UpdateControlsHelp(); };
             Grid.SetRow(editor,1); panel.Children.Add(editor);
-            status.Margin=new Thickness(0,12,0,0); status.Text="Сохраняется при скрытии · Ctrl+S";
+            status.Margin=new Thickness(0,12,0,0); UpdateControlsHelp();
             status.SetResourceReference(TextBlock.ForegroundProperty,"Hub.Muted");
             Grid.SetRow(status,2); panel.Children.Add(status);
             surface=new ThemedSurface(panel); Content=surface; ApplyTheme(current);
-            Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs e) { e.Cancel=true; Save(); Hide(); };
+            Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs e) { if(!disposed){e.Cancel=true; Save(); Hide();} };
             Deactivated+=delegate { Save(); };
             PreviewKeyDown+=delegate(object sender,KeyEventArgs e)
             {
-                if(e.Key==Key.Escape) { Save(); Hide(); e.Handled=true; }
-                if(e.Key==Key.S && (Keyboard.Modifiers&ModifierKeys.Control)!=0) { Save(); e.Handled=true; }
+                if(KeyChord.Parse(this.controls.Current.Get("quick-note.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)) { Save(); Hide(); e.Handled=true; }
+                if(KeyChord.Parse(this.controls.Current.Get("quick-note.save")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)) { Save(); e.Handled=true; }
             };
         }
+        void UpdateControlsHelp(){if(disposed)return;string save=controls.Current.Get("quick-note.save"),hide=controls.Current.Get("quick-note.hide");status.Text=(dirty?"Изменено":"Сохранено")+(save!=""?" · "+save+" — сохранить":"")+(hide!=""?" · "+hide+" — скрыть":"");}
+        public void Dispose(){if(disposed)return;Save();disposed=true;controls.Changed-=controlsChanged;if(ownsControls)controls.Dispose();Close();}
         internal void ApplyTheme(ThemeProfile profile) { current=profile; if(surface!=null) surface.Apply(this,current); }
         internal void Save()
         {
@@ -99,7 +112,7 @@ namespace ReFix.QuickNote
                 string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
                 File.WriteAllText(temp,editor.Text,Encoding.UTF8);
                 if(File.Exists(path)) File.Replace(temp,path,null); else File.Move(temp,path);
-                dirty=false; status.Text="Сохранено · Ctrl+S";
+                dirty=false;UpdateControlsHelp();
             }
             catch(Exception ex)
             {

@@ -13,21 +13,24 @@ namespace ReFix.Hub
     {
         private readonly Application app;
         private readonly HubWindow hub;
-        internal HubSession(ThemeStore themes,ModuleManager manager)
+        internal HubSession(ThemeStore themes,ModuleManager manager,ControlsStore controls,Action checkUpdates)
         {
             app=new Application { ShutdownMode=ShutdownMode.OnExplicitShutdown };
             app.DispatcherUnhandledException+=delegate(object sender,DispatcherUnhandledExceptionEventArgs e){Program.Log(e.Exception);e.Handled=true;System.Windows.Forms.Application.ExitThread();};
-            hub=new HubWindow(themes,manager);ElementHost.EnableModelessKeyboardInterop(hub);
+            hub=new HubWindow(themes,manager,controls,checkUpdates);ElementHost.EnableModelessKeyboardInterop(hub);
         }
         public bool IsVisible {get{return hub.IsVisible;}}
         public void Show(){hub.ShowHub();}
         public void Toggle(){if(hub.IsVisible)Hide();else Show();}
         public void Hide(){hub.HideHub();}
         public void OpenStyles(){hub.OpenStyles();}
+        public void OpenControls(){hub.OpenControls();}
+        public void SetNotice(string message){hub.SetNotice(message);}
         public void Close(){hub.Exit();app.Shutdown();}
         public void Render(string path)
         {
             Show();OpenStyles();Pump();Directory.CreateDirectory(path);Capture(hub,Path.Combine(path,"hub.png"));Capture(hub.StyleEditor,Path.Combine(path,"styles.png"));
+            OpenControls();Pump();Capture(hub.ControlsEditor,Path.Combine(path,"controls.png"));
         }
         private static void Pump(){DispatcherFrame frame=new DispatcherFrame();Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(delegate{frame.Continue=false;}));Dispatcher.PushFrame(frame);}
         private static void Capture(Window window,string path)

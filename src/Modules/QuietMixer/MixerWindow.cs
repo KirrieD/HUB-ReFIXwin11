@@ -32,8 +32,11 @@ namespace QuietMixer
         internal bool RefreshRunning { get { return timer.IsEnabled; } }
         internal bool HasAudio { get { return audio != null; } }
         internal int RowCount { get { return views.Count; } }
-        internal MixerWindow(ThemeProfile profile)
+        readonly ControlsStore controls; readonly bool ownsControls; EventHandler controlsChanged;
+        internal MixerWindow(ThemeProfile profile) : this(profile,null) {}
+        internal MixerWindow(ThemeProfile profile,ControlsStore controls)
         {
+            this.controls=controls??new ControlsStore(Paths.Root);ownsControls=controls==null;controlsChanged=delegate{Dispatcher.BeginInvoke(new Action(UpdateControlsHelp));};this.controls.Changed+=controlsChanged;
             Title = "QuietMixer — микшер громкости"; Width = 420; Height = 520;
             WindowStyle = WindowStyle.None; AllowsTransparency=true; ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false; Topmost = true; WindowStartupLocation = WindowStartupLocation.Manual;
@@ -59,17 +62,18 @@ namespace QuietMixer
             header.Children.Add(menu); root.Children.Add(header);
             ScrollViewer scroll = new ScrollViewer { Content=rows, VerticalScrollBarVisibility=ScrollBarVisibility.Auto, HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled, Padding=new Thickness(0,0,5,0) };
             Grid.SetRow(scroll,1); root.Children.Add(scroll);
-            status.Text="Ctrl+Alt+V · Esc — закрыть"; status.FontSize=11; status.Opacity=.6; status.Margin=new Thickness(0,14,0,0); status.TextWrapping=TextWrapping.Wrap;
+            UpdateControlsHelp(); status.FontSize=11; status.Opacity=.6; status.Margin=new Thickness(0,14,0,0); status.TextWrapping=TextWrapping.Wrap;
             Grid.SetRow(status,2); root.Children.Add(status);
             surface=new ThemedSurface(root); Content=surface; surface.Apply(this,currentTheme);
             timer = new DispatcherTimer { Interval=TimeSpan.FromSeconds(1) };
             timer.Tick += delegate { RefreshAudio(); };
             IsVisibleChanged += delegate { if (IsVisible) { RefreshAudio(); timer.Start(); } else { timer.Stop(); ReleaseAudio(); } };
             Deactivated += delegate { if (!closing && !positioning && !ContextMenuOpen()) Hide(); };
-            PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key==Key.Escape) { Hide(); e.Handled=true; } };
+            PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (KeyChord.Parse(this.controls.Current.Get("quiet-mixer.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)) { Hide(); e.Handled=true; } };
             SourceInitialized += delegate { ApplyCorners(); };
-            Closed += delegate { closing=true; timer.Stop(); ReleaseAudio(); };
+            Closed += delegate { closing=true;this.controls.Changed-=controlsChanged;if(ownsControls)this.controls.Dispose();timer.Stop(); ReleaseAudio(); };
         }
+        private void UpdateControlsHelp() { if(closing)return;var p=controls.Current;string toggle=p.Get("quiet-mixer.toggle"),hide=p.Get("quiet-mixer.hide");status.Text="Устройство по умолчанию"+(toggle!=""?" · "+toggle:"")+(hide!=""?" · "+hide+" — скрыть":""); }
         private bool ContextMenuOpen()
         {
             return FindOpenMenu(this);
@@ -184,7 +188,7 @@ namespace QuietMixer
                     ChannelRow row=new ChannelRow(channel,dark,false); views.Add(channel.Id,row); channels.Add(channel); rows.Children.Add(row);
                 }
                 foreach (ChannelRow view in views.Values) view.Sync();
-                status.Text=current.Count==0 ? "Запустите звук в приложении — здесь появится его регулятор.\nCtrl+Alt+V · Esc — закрыть" : "Устройство по умолчанию · Ctrl+Alt+V · Esc — закрыть";
+                UpdateControlsHelp();
             }
             catch (COMException ex)
             {
