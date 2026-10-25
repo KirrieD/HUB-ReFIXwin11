@@ -95,7 +95,7 @@ namespace QuietMixer
                 });
 
                 tray.Icon=System.Drawing.SystemIcons.Application;
-                Action updateLabel=delegate {var live=controls.GetRuntime("quiet-mixer.toggle");string key=live==null?controls.Current.Get("quiet-mixer.toggle"):live.Actual;string label="QuietMixer"+(key!=""?" · "+key:"");tray.Text=label.Length>63?label.Substring(0,63):label;};updateLabel();
+                Action updateLabel=delegate {var live=controls.GetRuntime("quiet-mixer.toggle");string key=live==null?controls.Current.Get("quiet-mixer.toggle"):live.Actual;string label="QuietMixer v"+ProductInfo.Version+(key!=""?" · "+key:"");tray.Text=label.Length>63?label.Substring(0,63):label;};updateLabel();
                 EventHandler controlsChanged=delegate{app.Dispatcher.BeginInvoke(updateLabel);};controls.Changed+=controlsChanged;controls.RuntimeChanged+=controlsChanged;
                 Forms.ContextMenuStrip menu=new Forms.ContextMenuStrip();
                 menu.Items.Add("Открыть микшер",null,delegate { show(); });

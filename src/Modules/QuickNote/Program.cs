@@ -62,7 +62,7 @@ namespace ReFix.QuickNote
         internal NoteWindow(ThemeProfile profile,ControlsStore controls)
         {
             this.controls=controls??new ControlsStore(Paths.Root);ownsControls=controls==null;controlsChanged=delegate{Dispatcher.BeginInvoke(new Action(UpdateControlsHelp));};this.controls.Changed+=controlsChanged;
-            Title="Быстрая заметка · ReFIX"; Width=390; Height=420;
+            Title="Быстрая заметка v"+ProductInfo.Version+" · ReFIX"; Width=390; Height=420;
             WindowStyle=WindowStyle.None; AllowsTransparency=true; ResizeMode=ResizeMode.NoResize;
             MinWidth=280; MinHeight=260; WindowStartupLocation=WindowStartupLocation.CenterScreen;
             current=profile;
@@ -72,11 +72,13 @@ namespace ReFix.QuickNote
             panel.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto });
             panel.RowDefinitions.Add(new RowDefinition());
             panel.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto });
-            TextBlock heading=new TextBlock { Text="Быстрая заметка",FontSize=22,Margin=new Thickness(0,0,0,16) };
+            StackPanel title=new StackPanel { Margin=new Thickness(0,0,0,16) };
+            title.Children.Add(new TextBlock { Text="Быстрая заметка",FontSize=22 });
+            title.Children.Add(new TextBlock { Text="v"+ProductInfo.Version,FontSize=12,Opacity=.6,Margin=new Thickness(0,4,0,0) });
             DockPanel header=new DockPanel();
             Button hide=new Button { Content="×", Width=28,Height=28,ToolTip="Сохранить и скрыть",Margin=new Thickness(8,0,0,12) };
             hide.SetResourceReference(Control.BackgroundProperty,"Hub.Surface"); hide.SetResourceReference(Control.ForegroundProperty,"Hub.Foreground");
-            hide.Click+=delegate { Save(); Hide(); }; DockPanel.SetDock(hide,Dock.Right); header.Children.Add(hide); header.Children.Add(heading);
+            hide.Click+=delegate { Save(); Hide(); }; DockPanel.SetDock(hide,Dock.Right); header.Children.Add(hide); header.Children.Add(title);
             header.MouseLeftButtonDown+=delegate { if(Mouse.LeftButton==MouseButtonState.Pressed) DragMove(); }; panel.Children.Add(header);
             editor.AcceptsReturn=true; editor.AcceptsTab=true; editor.TextWrapping=TextWrapping.Wrap;
             editor.VerticalScrollBarVisibility=ScrollBarVisibility.Auto; editor.Padding=new Thickness(12);

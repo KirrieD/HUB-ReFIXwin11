@@ -184,7 +184,7 @@ namespace ReFix.Hub
             Grid layout=new Grid(); layout.ColumnDefinitions.Add(new ColumnDefinition()); layout.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(236) }); Child=layout;
             StackPanel text=new StackPanel { Margin=new Thickness(0,0,16,0) }; layout.Children.Add(text);
             DockPanel heading=new DockPanel(); state=Ui.Text("NO",12,"Hub.Muted"); state.FontWeight=FontWeights.Bold; state.Margin=new Thickness(12,3,0,0); DockPanel.SetDock(state,Dock.Right); heading.Children.Add(state); heading.Children.Add(Ui.Text(module.Manifest.Name,18,"Hub.Foreground")); text.Children.Add(heading);
-            version=Ui.Text("",10,"Hub.Muted"); version.Margin=new Thickness(0,4,0,9); text.Children.Add(version);
+            version=Ui.Text("",12,"Hub.Foreground"); version.Margin=new Thickness(0,4,0,9); text.Children.Add(version);
             text.Children.Add(Ui.Text(module.Manifest.Description,12,"Hub.Muted"));
             details=Ui.Text("",11,"Hub.Muted"); details.Margin=new Thickness(0,7,0,0); text.Children.Add(details);
             WrapPanel actions=new WrapPanel { Margin=new Thickness(0,12,0,0) }; text.Children.Add(actions);
@@ -201,7 +201,7 @@ namespace ReFix.Hub
         {
             state.Text=View.State; state.SetResourceReference(TextBlock.ForegroundProperty,View.State=="ON"?"Hub.Accent":"Hub.Muted");
             state.ToolTip=View.State=="NO"?"Не установлено":View.State=="ON"?"Состояние проверено: работает":"Установлено, выключено";
-            version.Text="v"+View.Manifest.Version+(string.IsNullOrEmpty(View.InstalledVersion)?"":"  ·  установлена "+View.InstalledVersion);
+            version.Text=string.IsNullOrEmpty(View.InstalledVersion)?"Не установлена · доступна v"+View.Manifest.Version:"Установлена: v"+View.InstalledVersion+(new Version(View.Manifest.Version)>new Version(View.InstalledVersion)?" · доступна v"+View.Manifest.Version:"");
             details.Text=View.Detail??"";
             primary.Content=View.IsBusy?"Подождите…":View.State=="NO"?"Установить":View.State=="ON"?"Выключить":View.Manifest.Kind=="fix"?"Применить":"Включить";
             primary.IsEnabled=!View.IsBusy; open.IsEnabled=!View.IsBusy;

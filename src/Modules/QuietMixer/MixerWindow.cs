@@ -37,7 +37,7 @@ namespace QuietMixer
         internal MixerWindow(ThemeProfile profile,ControlsStore controls)
         {
             this.controls=controls??new ControlsStore(Paths.Root);ownsControls=controls==null;controlsChanged=delegate{Dispatcher.BeginInvoke(new Action(UpdateControlsHelp));};this.controls.Changed+=controlsChanged;
-            Title = "QuietMixer — микшер громкости"; Width = 420; Height = 520;
+            Title = "QuietMixer v"+ProductInfo.Version+" — микшер громкости"; Width = 420; Height = 520;
             WindowStyle = WindowStyle.None; AllowsTransparency=true; ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false; Topmost = true; WindowStartupLocation = WindowStartupLocation.Manual;
             FontFamily = new FontFamily("Segoe UI Variable, Segoe UI"); FontSize = 13;
@@ -54,7 +54,7 @@ namespace QuietMixer
             header.ColumnDefinitions.Add(new ColumnDefinition()); header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             StackPanel title = new StackPanel();
             title.Children.Add(new TextBlock { Text="Микшер громкости", FontSize=21, FontWeight=FontWeights.SemiBold });
-            title.Children.Add(new TextBlock { Text="Звук под вашим контролем", FontSize=12, Opacity=.6, Margin=new Thickness(0,5,0,0) });
+            title.Children.Add(new TextBlock { Text="v"+ProductInfo.Version+" · Звук под вашим контролем", FontSize=12, Opacity=.6, Margin=new Thickness(0,5,0,0) });
             header.Children.Add(title);
             Button menu = new Button { Content="⋯", Width=36, Height=34, FontSize=22, ToolTip="Настройки QuietMixer" };
             AutomationProperties.SetName(menu,"Настройки QuietMixer"); Grid.SetColumn(menu,1);

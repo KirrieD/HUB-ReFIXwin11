@@ -62,7 +62,7 @@ namespace ReFix.Tests
                         binding.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(binding),0,Key.Enter){RoutedEvent=Keyboard.KeyDownEvent});
                         using(ControlsStore check=new ControlsStore(root))if(check.Current.Get("hub.hide")!="Backspace")throw new Exception("Typed assignment was not saved");
                         TextBox focusedSearch=Find<TextBox>(hub,"Поиск инструментов");focusedSearch.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(focusedSearch),0,Key.Back){RoutedEvent=Keyboard.PreviewKeyDownEvent});
-                        if(hub.IsVisible||hub.ControlsEditor.IsVisible)throw new Exception("Reassigned hide must work before text input consumes key");
+                        if(hub.IsVisible||hub.ControlsEditor.IsVisible)throw new Exception("Reassigned hide must work before text input consumes key; physical modifiers="+Keyboard.Modifiers+"; saved="+((ControlsStore)typeof(HubWindow).GetField("controls",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(hub)).Current.Get("hub.hide"));
                         Report("modeless controls, manual key assignment and preview key routing",true);
                         hub.HideHub();if(hub.StatusTimerRunning || hub.StyleEditor.IsVisible)throw new Exception("Hidden windows must stop UI polling");
                         Report("modeless editor, shared live colors, opaque text, no hidden status timer",true);
