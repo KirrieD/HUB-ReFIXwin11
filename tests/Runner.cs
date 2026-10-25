@@ -26,6 +26,8 @@ namespace ReFix.Tests
             Group("backend",delegate{BackendTests.Run(Report);});
             Group("real module lifecycle",delegate{BackendTests.RunIntegration(Report);});
             Group("modeless editor and live theme",UiTest);
+            Group("HUB behavior",delegate{HubBehaviorTests.Run(Report);});
+            Group("controls keyboard preview",delegate{ControlsUiTests.Run(Report);});
             Console.WriteLine(passed+" passed; "+failed+" failed");return failed==0?0:1;
         }
         private static void UiTest()

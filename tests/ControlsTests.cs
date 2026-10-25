@@ -13,6 +13,7 @@ public static void Run(Action<string,bool> report) {
 Type t=typeof(KeyChord);report("keyboard parser available",t!=null);if(t==null)return;
 object c=t.GetMethod("Parse").Invoke(null,new object[]{"shift+ctrl+f22"});report("canonical physical chord",(string)t.GetProperty("Gesture").GetValue(c,null)=="Ctrl+Shift+F22");
 report("canonical Backspace parses again",KeyChord.Parse("Backspace").Gesture=="Backspace");
+report("navigation keys have stable keyboard labels",KeyChord.Parse("Ctrl+PageDown").Gesture=="Ctrl+PageDown"&&KeyChord.Parse("PageUp").Gesture=="PageUp"&&KeyChord.Parse("Next").Gesture=="PageDown"&&KeyChord.Parse("Prior").Gesture=="PageUp");
 report("local keys match exact modifiers",KeyChord.Parse("Ctrl+S").Matches(Key.S,ModifierKeys.Control)&&!KeyChord.Parse("Ctrl+S").Matches(Key.S,ModifierKeys.None));
 report("disabled chord never matches",!KeyChord.Parse("").Matches(Key.None,ModifierKeys.None));
 report("reserved OS chord rejected",Reject(delegate{KeyChord.Parse("Alt+Tab");}));
@@ -33,6 +34,9 @@ File.WriteAllText(Path.Combine(root,"controls-runtime","hub.toggle.stale.json"),
 report("runtime PID reuse is not shown active",store.GetRuntime("hub.toggle")==null);
 var startup=store.Current;startup.StartMixerWithHub=true;store.Save(startup);store.ResetDefaults();
 report("resetting keys preserves mixer startup preference",store.Current.StartMixerWithHub&&store.Current.Get("quick-note.save")=="Ctrl+S");
+var auto=typeof(ControlsProfile).GetProperty("AutoHideHub");
+report("auto-hide defaults on for existing profiles",auto!=null&&(bool)auto.GetValue(new ControlsProfile(),null));
+if(auto!=null){var pref=store.Current;auto.SetValue(pref,false,null);store.Save(pref);store.ResetDefaults();using(var reopened=new ControlsStore(root))report("reset keys preserves persisted auto-hide preference",!(bool)auto.GetValue(reopened.Current,null));}
 NativeLifecycle(store,root,report);
 changed.Dispose();
 } } finally { if(Directory.Exists(root))Directory.Delete(root,true); }
@@ -40,6 +44,7 @@ changed.Dispose();
 static bool Reject(Action a){try{a();return false;}catch(ArgumentException){return true;}catch(InvalidOperationException){return true;}}
 [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hwnd,int id,uint modifiers,uint key);
 [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hwnd,int id);
+[DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd,int msg,IntPtr wParam,IntPtr lParam);
 static void Pump(){var frame=new DispatcherFrame();Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(delegate{frame.Continue=false;}));Dispatcher.PushFrame(frame);}
 static bool Wait(Func<bool> check){DateTime until=DateTime.UtcNow.AddSeconds(4);do{Pump();if(check())return true;Thread.Sleep(10);}while(DateTime.UtcNow<until);return false;}
 static void NativeLifecycle(ControlsStore store,string root,Action<string,bool> report){
@@ -48,7 +53,15 @@ using(var hwnd=new HwndSource(new HwndSourceParameters("ReFix isolated key tests
 int presses=0;using(var registration=new GlobalKeyRegistration(store,"quick-note.toggle",hwnd.Handle,0x6A20,delegate{presses++;})){
 hwnd.AddHook(delegate(IntPtr h,int msg,IntPtr w,IntPtr l,ref bool handled){handled=registration.ProcessMessage(msg,w);return IntPtr.Zero;});
 report("native registration reports live identity",store.GetRuntime("quick-note.toggle").Actual=="Ctrl+Alt+Shift+F22");
-registration.ProcessMessage(0x0312,new IntPtr(0x6A20));report("owned hotkey dispatch invokes action",presses==1);
+report("owned hotkey dispatch passes through native message loop",PostMessage(hwnd.Handle,0x0312,new IntPtr(0x6A20),IntPtr.Zero)&&Wait(delegate{return presses==1;}));
+using(var editor=new ControlsStore(root)){
+editor.Assign("quick-note.toggle","Ctrl+Alt+Shift+F21");
+report("independent editor atomic save rebinds running listener",Wait(delegate{var s=store.GetRuntime("quick-note.toggle");return s!=null&&s.Actual=="Ctrl+Alt+Shift+F21";}));
+editor.Assign("quick-note.toggle","");
+report("independent editor clear unregisters running listener",Wait(delegate{var s=store.GetRuntime("quick-note.toggle");return s!=null&&s.Actual=="";}));
+editor.Assign("quick-note.toggle","Ctrl+Alt+Shift+F22");
+report("independent editor can assign after clear",Wait(delegate{var s=store.GetRuntime("quick-note.toggle");return s!=null&&s.Actual=="Ctrl+Alt+Shift+F22";}));
+}
 var ready=new ManualResetEvent(false);var release=new ManualResetEvent(false);bool held=false;
 var owner=new Thread(delegate(){held=RegisterHotKey(IntPtr.Zero,0x6A30,7,0x86);ready.Set();release.WaitOne();if(held)UnregisterHotKey(IntPtr.Zero,0x6A30);});owner.Start();ready.WaitOne();
 try{report("isolated conflict key reserved",held);if(held){

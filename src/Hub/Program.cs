@@ -37,6 +37,7 @@ namespace ReFix.Hub
             get { using(SHA256 hash=SHA256.Create())return "ReFIXHub."+BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(WindowsIdentity.GetCurrent().User.Value+Paths.Root))).Replace("-","").Substring(0,20); }
         }
         internal static void Log(Exception ex){try{Paths.Ensure();File.WriteAllText(Path.Combine(Paths.Root,"hub-error.log"),ex.ToString());}catch{}}
+        internal static bool ShouldAutoHide(bool enabled,uint foregroundProcess,uint ownProcess){return enabled&&foregroundProcess!=0&&foregroundProcess!=ownProcess;}
         [STAThread]
         private static void Main(string[] args)
         {
@@ -104,7 +105,7 @@ namespace ReFix.Hub
                 {
                     if(session==null || !session.IsVisible)return;
                     uint current;Native.GetWindowThreadProcessId(Native.GetForegroundWindow(),out current);
-                    if(current!=0 && current!=own)session.Hide();
+                    if(ShouldAutoHide(controls.Current.AutoHideHub,current,own))session.Hide();
                 };
                 IntPtr foreground=render?IntPtr.Zero:Native.SetWinEventHook(3,3,IntPtr.Zero,observer,0,0,0);
                 EventHandler firstShow=null;

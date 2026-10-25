@@ -32,10 +32,10 @@ namespace ReFix.Shared
     }
     public sealed class ControlsProfile
     {
-        public Dictionary<string,string> Bindings { get; set; } public bool StartMixerWithHub { get; set; }
-        public ControlsProfile() { Bindings=new Dictionary<string,string>();foreach(var a in ControlActions.All)Bindings[a.Id]=a.DefaultGesture; }
+        public Dictionary<string,string> Bindings { get; set; } public bool StartMixerWithHub { get; set; } public bool AutoHideHub { get; set; }
+        public ControlsProfile() { AutoHideHub=true;Bindings=new Dictionary<string,string>();foreach(var a in ControlActions.All)Bindings[a.Id]=a.DefaultGesture; }
         public string Get(string id) { var a=ControlActions.Find(id);string v;return Bindings!=null&&Bindings.TryGetValue(id,out v)?v??"":a.DefaultGesture; }
-        public ControlsProfile Clone() { var p=new ControlsProfile();p.StartMixerWithHub=StartMixerWithHub;if(Bindings!=null)foreach(var b in Bindings)p.Bindings[b.Key]=b.Value;return p; }
+        public ControlsProfile Clone() { var p=new ControlsProfile();p.StartMixerWithHub=StartMixerWithHub;p.AutoHideHub=AutoHideHub;if(Bindings!=null)foreach(var b in Bindings)p.Bindings[b.Key]=b.Value;return p; }
     }
     public sealed class KeyChord
     {
@@ -60,7 +60,7 @@ namespace ReFix.Shared
             if(key==Key.None)throw new ArgumentException("A physical key is required");
             uint vk=(uint)KeyInterop.VirtualKeyFromKey(key);
             if(key==Key.F12||(mods&8)!=0||(mods==1&&(key==Key.Tab||key==Key.Escape||key==Key.F4))||(mods==2&&key==Key.Escape)||(mods==3&&key==Key.Delete))throw new ArgumentException("This shortcut is reserved by Windows");
-            string name=key==Key.Escape?"Esc":key==Key.Return?"Enter":key==Key.Back?"Backspace":key.ToString();
+            string name=key==Key.Escape?"Esc":key==Key.Return?"Enter":key==Key.Back?"Backspace":key==Key.PageUp?"PageUp":key==Key.PageDown?"PageDown":key.ToString();
             if(key>=Key.D0&&key<=Key.D9)name=((int)(key-Key.D0)).ToString();
             return new KeyChord(((mods&2)!=0?"Ctrl+":"")+((mods&1)!=0?"Alt+":"")+((mods&4)!=0?"Shift+":"")+((mods&8)!=0?"Win+":"")+name,mods,vk);
         }
@@ -81,12 +81,12 @@ namespace ReFix.Shared
     }
     public sealed class ControlsStore : IDisposable
     {
-        readonly object gate=new object();readonly string file,runtime;readonly FileSystemWatcher watcher,runtimeWatcher;ControlsProfile current;bool disposed;
+        readonly object gate=new object();readonly string file,runtime;readonly FileSystemWatcher watcher,runtimeWatcher;readonly Timer reloadTimer;ControlsProfile current;bool disposed;int reloadAttempts;
         public event EventHandler Changed;public event EventHandler RuntimeChanged;
         public ControlsProfile Current {get{lock(gate)return current.Clone();}}
         public ControlsStore(string root) {
             if(String.IsNullOrWhiteSpace(root))throw new ArgumentException("A data root is required");Directory.CreateDirectory(root);file=Path.Combine(Path.GetFullPath(root),"controls.json");runtime=Path.Combine(Path.GetFullPath(root),"controls-runtime");Directory.CreateDirectory(runtime);
-            current=Read()??new ControlsProfile();watcher=new FileSystemWatcher(Path.GetDirectoryName(file),"controls.json");watcher.NotifyFilter=NotifyFilters.LastWrite|NotifyFilters.FileName|NotifyFilters.Size;watcher.Changed+=OnConfig;watcher.Created+=OnConfig;watcher.Renamed+=OnConfig;watcher.EnableRaisingEvents=true;
+            current=Read()??new ControlsProfile();reloadTimer=new Timer(ReloadConfig,null,Timeout.Infinite,Timeout.Infinite);watcher=new FileSystemWatcher(Path.GetDirectoryName(file),"controls.json");watcher.NotifyFilter=NotifyFilters.LastWrite|NotifyFilters.FileName|NotifyFilters.Size;watcher.Changed+=OnConfig;watcher.Created+=OnConfig;watcher.Renamed+=OnConfig;watcher.Deleted+=OnConfig;watcher.EnableRaisingEvents=true;
             runtimeWatcher=new FileSystemWatcher(runtime,"*.json");runtimeWatcher.NotifyFilter=NotifyFilters.LastWrite|NotifyFilters.FileName|NotifyFilters.Size;runtimeWatcher.Changed+=OnRuntime;runtimeWatcher.Created+=OnRuntime;runtimeWatcher.Deleted+=OnRuntime;runtimeWatcher.Renamed+=OnRuntime;runtimeWatcher.EnableRaisingEvents=true;
         }
         internal static T ReadJson<T>(string path) where T:class {try{using(var s=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete)){if(s.Length>65536)return null;using(var r=new StreamReader(s)){var chars=new char[65537];int n=r.ReadBlock(chars,0,chars.Length);return n>65536?null:new JavaScriptSerializer().Deserialize<T>(new string(chars,0,n));}}}catch(IOException){return null;}catch(UnauthorizedAccessException){return null;}catch(ArgumentException){return null;}catch(InvalidOperationException){return null;} }
@@ -98,16 +98,20 @@ namespace ReFix.Shared
             return p;
         }
         void Raise(EventHandler h){if(h!=null)ThreadPool.QueueUserWorkItem(delegate{lock(gate){if(disposed)return;}h(this,EventArgs.Empty);});}
-        void OnConfig(object sender,FileSystemEventArgs e){lock(gate){if(disposed)return;var next=Read();if(next==null||new JavaScriptSerializer().Serialize(next)==new JavaScriptSerializer().Serialize(current))return;current=next;}Raise(Changed);}
+        // File.Replace raises rename notifications while its destination can still be
+        // missing or locked. Coalesce the burst and retry transient reads, otherwise
+        // a successfully saved edit can be lost until the process is restarted.
+        void OnConfig(object sender,FileSystemEventArgs e){lock(gate){if(disposed)return;reloadAttempts=0;reloadTimer.Change(40,Timeout.Infinite);}}
+        void ReloadConfig(object state){lock(gate){if(disposed)return;var next=Read();if(next==null){if(++reloadAttempts<6)reloadTimer.Change(40,Timeout.Infinite);return;}if(new JavaScriptSerializer().Serialize(next)==new JavaScriptSerializer().Serialize(current))return;current=next;}Raise(Changed);}
         void OnRuntime(object sender,FileSystemEventArgs e){Raise(RuntimeChanged);}
         public void Assign(string actionId,string gesture){ControlActions.Find(actionId);var p=Current;p.Bindings[actionId]=gesture;Save(p);}
         public void Save(ControlsProfile profile){if(profile==null)throw new ArgumentNullException("profile");var p=Validate(profile);lock(gate){if(disposed)throw new ObjectDisposedException("ControlsStore");foreach(var a in ControlActions.All)if(a.Scope=="global"&&p.Get(a.Id)!=""&&p.Get(a.Id)!=current.Get(a.Id))Probe(a.Id,p.Get(a.Id));WriteAtomic(file,p);current=p;}Raise(Changed);}
         void Probe(string action,string gesture){var live=GetRuntime(action);if(live!=null&&live.Actual==gesture)return;var c=KeyChord.Parse(gesture);Exception error=null;var t=new Thread(delegate(){if(!ControlsNative.RegisterHotKey(IntPtr.Zero,0x3FF0,c.Modifiers|0x4000,c.VirtualKey)){error=new InvalidOperationException("Shortcut is unavailable in Windows: "+gesture);return;}ControlsNative.UnregisterHotKey(IntPtr.Zero,0x3FF0);});t.Start();t.Join();if(error!=null)throw error;}
-        public void ResetDefaults(){var defaults=new ControlsProfile();defaults.StartMixerWithHub=Current.StartMixerWithHub;Save(defaults);}
+        public void ResetDefaults(){var defaults=new ControlsProfile();var previous=Current;defaults.StartMixerWithHub=previous.StartMixerWithHub;defaults.AutoHideHub=previous.AutoHideHub;Save(defaults);}
         internal static void WriteAtomic(string path,object value){string tmp=path+"."+Guid.NewGuid().ToString("N")+".tmp";try{File.WriteAllText(tmp,new JavaScriptSerializer().Serialize(value));if(File.Exists(path))File.Replace(tmp,path,null);else File.Move(tmp,path);}finally{if(File.Exists(tmp))File.Delete(tmp);}}
         internal string RuntimePath(string id,int pid,long ticks){return Path.Combine(runtime,id+"."+pid+"."+ticks+".json");}
         public HotkeyRuntimeStatus GetRuntime(string actionId){ControlActions.Find(actionId);HotkeyRuntimeStatus found=null;foreach(string path in Directory.GetFiles(runtime,actionId+".*.json")){var s=ReadJson<HotkeyRuntimeStatus>(path);if(s==null||s.ActionId!=actionId||!ControlsNative.Alive(s))continue;if(found==null||s.ProcessStartTicks>found.ProcessStartTicks)found=s;}return found;}
-        public void Dispose(){lock(gate){if(disposed)return;disposed=true;watcher.Dispose();runtimeWatcher.Dispose();}}
+        public void Dispose(){lock(gate){if(disposed)return;disposed=true;watcher.Dispose();runtimeWatcher.Dispose();reloadTimer.Dispose();}}
     }
     public sealed class GlobalKeyRegistration : IDisposable
     {

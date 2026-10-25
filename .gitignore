@@ -6,3 +6,4 @@ artifacts/
 test-data/
 tests/*.dll
 tests/*.exe
+/Documents/

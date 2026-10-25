@@ -44,7 +44,7 @@ namespace ReFix.Hub
                         Download(release);
                     });
                 }
-                catch(Exception ex){Post(delegate{Finish();if(manual)report("Не удалось проверить обновление: "+ex.Message);else Program.Log(ex);});}
+                catch(Exception ex){Program.Log(ex);string failure=HubUpdateService.FailureMessage(ex);Post(delegate{Finish();if(manual)report("Не удалось проверить обновление: "+failure);});}
             });
         }
         private bool Confirm(HubRelease release)
@@ -73,10 +73,10 @@ namespace ReFix.Hub
                     Post(delegate
                     {
                         try{service.StartApply(prepared);CloseProgress();report("Обновление устанавливается. HUB перезапускается…");exit();}
-                        catch(Exception ex){CloseProgress();Finish();report("Обновление не установлено: "+ex.Message);}
+                        catch(Exception ex){CloseProgress();Finish();report("Обновление не установлено: "+HubUpdateService.FailureMessage(ex));}
                     });
                 }
-                catch(Exception ex){Post(delegate{CloseProgress();Finish();report("Обновление не установлено: "+ex.Message);Forms.MessageBox.Show("Текущая версия сохранена.\n\n"+ex.Message,"Обновление HUB",Forms.MessageBoxButtons.OK,Forms.MessageBoxIcon.Warning);});}
+                catch(Exception ex){Program.Log(ex);string failure=HubUpdateService.FailureMessage(ex);Post(delegate{CloseProgress();Finish();report("Обновление не установлено: "+failure);Forms.MessageBox.Show("Текущая версия сохранена.\n\n"+failure,"Обновление HUB",Forms.MessageBoxButtons.OK,Forms.MessageBoxIcon.Warning);});}
             });
         }
         private void Progress(int percent,string text){Post(delegate{if(progressWindow==null)return;status.Text=text;if(percent>=0){bar.Style=Forms.ProgressBarStyle.Continuous;bar.Value=Math.Max(0,Math.Min(100,percent));}});}

@@ -45,7 +45,7 @@ namespace ReFix.Hub
             }
             Border line=new Border { Height=1,Margin=new Thickness(0,18,0,12) };line.SetResourceReference(BackgroundProperty,"Hub.Border");content.Children.Add(line);
             content.Children.Add(Ui.Text("Раскладка клавиатуры",15,"Hub.Foreground"));
-            TextBlock physical=Ui.Text("Латинские и русские обозначения одной физической клавиши. Подсвечено выбранное назначение.",11,"Hub.Muted");physical.Margin=new Thickness(0,6,0,10);content.Children.Add(physical);
+            TextBlock physical=Ui.Text("Цветом отмечены назначенные клавиши. Выбранное сочетание выделено ярче. Латинские и русские буквы обозначают одну физическую клавишу.",11,"Hub.Muted");physical.Margin=new Thickness(0,6,0,10);content.Children.Add(physical);
             content.Children.Add(BuildKeyboard());
             TextBlock standard=Ui.Text("Во время ввода: Esc — отменить, Backspace / Delete — убрать назначение. В микшере стрелки меняют громкость, Tab переключает элементы — это стандартное управление ползунками.",11,"Hub.Muted");standard.Margin=new Thickness(0,12,0,12);content.Children.Add(standard);
             mixerStartup.Margin=new Thickness(0,12,0,10);mixerStartup.Click+=delegate
@@ -54,7 +54,7 @@ namespace ReFix.Hub
             };content.Children.Add(mixerStartup);
             Button reset=Ui.Button("Восстановить стандартные клавиши",delegate
             {
-                try{capturing=null;controls.ResetDefaults();Refresh();notice.Text="Стандартные назначения восстановлены.";}catch(Exception ex){notice.Text=ex.Message;}
+                try{capturing=null;controls.ResetDefaults();foreach(var entry in typedAssignments)entry.Value.Text=controls.Current.Get(entry.Key);Refresh();notice.Text="Стандартные назначения восстановлены.";}catch(Exception ex){notice.Text=ex.Message;}
             },false);reset.HorizontalAlignment=HorizontalAlignment.Left;reset.Margin=new Thickness(0,6,0,12);content.Children.Add(reset);
             ScrollViewer scroll=new ScrollViewer { Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Padding=new Thickness(0,0,8,0) };Grid.SetRow(scroll,1);layout.Children.Add(scroll);
             notice.Margin=new Thickness(0,14,0,0);Grid.SetRow(notice,2);layout.Children.Add(notice);
@@ -82,7 +82,10 @@ namespace ReFix.Hub
         {
             StackPanel keyboard=new StackPanel();
             string[][] rows={new[]{"Esc","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12"},new[]{"1","2","3","4","5","6","7","8","9","0"},new[]{"Q/Й","W/Ц","E/У","R/К","T/Е","Y/Н","U/Г","I/Ш","O/Щ","P/З"},new[]{"A/Ф","S/Ы","D/В","F/А","G/П","H/Р","J/О","K/Л","L/Д"},new[]{"Z/Я","X/Ч","C/С","V/М","B/И","N/Т","M/Ь","Enter"},new[]{"Ctrl","Alt","Shift","Win","Space","Left","Down","Up","Right"}};
-            foreach(string[] row in rows)
+            var allRows=new List<string[]>(rows);
+            allRows.Insert(1,new[]{"F13","F14","F15","F16","F17","F18","F19","F20","F21","F22","F23","F24"});
+            allRows.Add(new[]{"Tab","Backspace","Delete","Insert","Home","End","PageUp","PageDown"});
+            foreach(string[] row in allRows)
             {
                 UniformGrid grid=new UniformGrid { Columns=row.Length,Margin=new Thickness(0,0,4,4) };
                 foreach(string key in row)
@@ -104,11 +107,11 @@ namespace ReFix.Hub
             if((key==Key.Back||key==Key.Delete)&&Keyboard.Modifiers==ModifierKeys.None){Assign(capturing,"");return;}
             ModifierKeys modifiers=Keyboard.Modifiers;
             string gesture=((modifiers&ModifierKeys.Control)!=0?"Ctrl+":"")+((modifiers&ModifierKeys.Alt)!=0?"Alt+":"")+((modifiers&ModifierKeys.Shift)!=0?"Shift+":"")+((modifiers&ModifierKeys.Windows)!=0?"Win+":"");
-            gesture+=((System.Windows.Forms.Keys)KeyInterop.VirtualKeyFromKey(key)).ToString();Assign(capturing,gesture);
+            gesture+=key==Key.PageUp?"PageUp":key==Key.PageDown?"PageDown":key.ToString();Assign(capturing,gesture);
         }
         private void Assign(string id,string value)
         {
-            try{controls.Assign(id,value);selected=id;capturing=null;notice.Text="Назначение сохранено и передано работающим программам.";}catch(Exception ex){notice.Text=ex.Message;capturing=null;}Refresh();
+            try{controls.Assign(id,value);typedAssignments[id].Text=controls.Current.Get(id);selected=id;capturing=null;notice.Text="Назначение сохранено. Состояние применения показано под действием.";}catch(Exception ex){notice.Text=ex.Message;capturing=null;}Refresh();
         }
         private void Refresh()
         {
@@ -121,19 +124,23 @@ namespace ReFix.Hub
                 else
                 {
                     HotkeyRuntimeStatus state=controls.GetRuntime(action.Id);
-                    states[action.Id].Text=state==null?"Не активно: программа не запущена":!string.IsNullOrEmpty(state.Error)?"Конфликт. Действует: "+(state.Actual??"нет")+". "+state.Error:string.IsNullOrEmpty(state.Actual)?"Выключено":"Активно: "+state.Actual;
+                    states[action.Id].Text=state==null?"Не активно: программа не запущена":state.Requested!=gesture?"Применяется: "+(string.IsNullOrEmpty(gesture)?"отключение":gesture):!string.IsNullOrEmpty(state.Error)?"Конфликт. Действует: "+(state.Actual??"нет")+". "+state.Error:string.IsNullOrEmpty(state.Actual)?"Выключено":"Активно: "+state.Actual;
                 }
             }
             updating=true;mixerStartup.IsChecked=p.StartMixerWithHub;updating=false;
-            foreach(var pair in keys){pair.Value.SetResourceReference(BackgroundProperty,"Hub.Surface");pair.Value.SetResourceReference(BorderBrushProperty,"Hub.Border");}
+            foreach(var pair in keys){pair.Value.SetResourceReference(BackgroundProperty,"Hub.Surface");pair.Value.SetResourceReference(BorderBrushProperty,"Hub.Border");((TextBlock)pair.Value.Child).SetResourceReference(TextBlock.ForegroundProperty,"Hub.Foreground");pair.Value.BorderThickness=new Thickness(1);}
+            Color accent=((SolidColorBrush)FindResource("Hub.Accent")).Color,surface=((SolidColorBrush)FindResource("Hub.Surface")).Color;
+            var assignedFill=new SolidColorBrush(Color.FromRgb((byte)(surface.R*.65+accent.R*.35),(byte)(surface.G*.65+accent.G*.35),(byte)(surface.B*.65+accent.B*.35)));
+            foreach(ControlAction action in ControlActions.All)
+                foreach(string token in p.Get(action.Id).Split('+')){Border cap;if(keys.TryGetValue(token,out cap))cap.Background=assignedFill;}
             if(selected!=null)
             {
                 string selectedGesture=p.Get(selected);
-                foreach(string token in (selectedGesture??"").Split('+')){Border cap;if(keys.TryGetValue(token,out cap))cap.SetResourceReference(BorderBrushProperty,"Hub.Accent");}
+                foreach(string token in (selectedGesture??"").Split('+')){Border cap;if(keys.TryGetValue(token,out cap)){cap.SetResourceReference(BackgroundProperty,"Hub.Accent");cap.SetResourceReference(BorderBrushProperty,"Hub.Accent");cap.BorderThickness=new Thickness(2);((TextBlock)cap.Child).SetResourceReference(TextBlock.ForegroundProperty,"Hub.AccentText");}}
             }
         }
         private void ApplyTheme(){Ui.Apply(this,themes.Current,frame,image);}
-        private void ThemeChanged(object sender,EventArgs e){if(!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(ApplyTheme));}
+        private void ThemeChanged(object sender,EventArgs e){if(!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(delegate{ApplyTheme();Refresh();}));}
         private void BindingsChanged(object sender,EventArgs e){if(!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(Refresh));}
     }
 }
