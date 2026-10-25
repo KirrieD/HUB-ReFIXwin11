@@ -47,7 +47,8 @@ namespace ReFix.Hub
             Grid shell=new Grid(); shell.RowDefinitions.Add(new RowDefinition { Height=new GridLength(56) }); shell.RowDefinitions.Add(new RowDefinition()); shell.RowDefinitions.Add(new RowDefinition { Height=new GridLength(40) }); layers.Children.Add(shell);
             shell.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(184) }); shell.ColumnDefinitions.Add(new ColumnDefinition());
             Grid title=TitleBar(); Grid.SetColumnSpan(title,2); shell.Children.Add(title);
-            StackPanel nav=new StackPanel { Margin=new Thickness(16,20,12,12) }; Grid.SetRow(nav,1); shell.Children.Add(nav);
+            StackPanel nav=new StackPanel { Margin=new Thickness(16,20,12,12) };
+            ScrollViewer navigation=new ScrollViewer { Content=nav,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled };Grid.SetRow(navigation,1);shell.Children.Add(navigation);
             nav.Children.Add(Ui.Text("Расширения\nи фиксы",18,"Hub.Foreground"));
             TextBlock intro=Ui.Text("Небольшие программы\nв одном месте",12,"Hub.Muted"); intro.Margin=new Thickness(0,10,0,26); nav.Children.Add(intro);
             AddNav(nav,"Все инструменты","all"); AddNav(nav,"Установленные","installed"); AddNav(nav,"Расширения","process"); AddNav(nav,"Фиксы Windows","fix");
@@ -59,6 +60,10 @@ namespace ReFix.Hub
             autorun.Click+=delegate { try { Startup.Enabled=autorun.IsChecked==true; } catch(Exception ex) { SetNotice(ex.Message); autorun.IsChecked=Startup.Enabled; } }; nav.Children.Add(autorun);
             autoHide.Click+=delegate { try { var p=controls.Current;p.AutoHideHub=autoHide.IsChecked==true;controls.Save(p); }catch(Exception ex){SetNotice(ex.Message);autoHide.IsChecked=controls.Current.AutoHideHub;} };nav.Children.Add(autoHide);
             shortcut.Margin=new Thickness(2,14,0,0); nav.Children.Add(shortcut);RefreshControls();
+            TextBlock folderLabel=Ui.Text("Папка HUB",11,"Hub.Muted");folderLabel.Margin=new Thickness(2,16,0,0);nav.Children.Add(folderLabel);
+            string hubDirectory=System.IO.Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory);
+            TextBox hubFolder=Ui.FolderPath(hubDirectory);System.Windows.Automation.AutomationProperties.SetName(hubFolder,"Папка HUB");nav.Children.Add(hubFolder);
+            Button openHubFolder=Ui.Button("Открыть папку",delegate{try{Ui.OpenFolder(hubDirectory);}catch(Exception ex){SetNotice(ex.Message);}},false);openHubFolder.Margin=new Thickness(0,6,0,0);openHubFolder.ToolTip="Открыть папку запущенного HUB";nav.Children.Add(openHubFolder);
             Grid main=new Grid { Margin=new Thickness(12,18,22,0) }; main.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto }); main.RowDefinitions.Add(new RowDefinition { Height=new GridLength(32) }); main.RowDefinitions.Add(new RowDefinition()); Grid.SetRow(main,1); Grid.SetColumn(main,1); shell.Children.Add(main);
             DockPanel heading=new DockPanel { Margin=new Thickness(0,0,0,12) };
             search.HorizontalAlignment=HorizontalAlignment.Right; DockPanel.SetDock(search,Dock.Right); heading.Children.Add(search); heading.Children.Add(Ui.Text("Инструменты",25,"Hub.Foreground")); main.Children.Add(heading);
@@ -173,7 +178,8 @@ namespace ReFix.Hub
         private readonly ControlsStore controls;
         private readonly Action<string> notify;
         private readonly TextBlock state,details,version;
-        private readonly Button primary,open,update,remove;
+        private readonly Button primary,open,update,remove,folder;
+        private readonly TextBox installationPath;
         private readonly ModulePreview previewWindow;
         internal ModuleCard(ModuleView module,ModuleManager service,Action<string> notice,ControlsStore bindings)
         {
@@ -187,11 +193,13 @@ namespace ReFix.Hub
             version=Ui.Text("",12,"Hub.Foreground"); version.Margin=new Thickness(0,4,0,9); text.Children.Add(version);
             text.Children.Add(Ui.Text(module.Manifest.Description,12,"Hub.Muted"));
             details=Ui.Text("",11,"Hub.Muted"); details.Margin=new Thickness(0,7,0,0); text.Children.Add(details);
+            installationPath=Ui.FolderPath("");System.Windows.Automation.AutomationProperties.SetName(installationPath,"Папка утилиты: "+module.Manifest.Name);text.Children.Add(installationPath);
             WrapPanel actions=new WrapPanel { Margin=new Thickness(0,12,0,0) }; text.Children.Add(actions);
             primary=Ui.Button("Установить",delegate { InvokePrimary(); },true); actions.Children.Add(primary);
             open=Ui.Button("Открыть",delegate { Run(delegate { return manager.ShowAsync(View); }); },false); open.Margin=new Thickness(7,0,0,0); actions.Children.Add(open);
             update=Ui.Button("Обновить",delegate { Run(delegate { return manager.InstallAsync(View); }); },false); update.Margin=new Thickness(7,0,0,0); actions.Children.Add(update);
             remove=Ui.Button("Удалить утилиту",Uninstall,false);remove.Margin=new Thickness(7,0,0,0);remove.ToolTip="Остановить утилиту и удалить её файлы. Личные данные сохраняются.";actions.Children.Add(remove);
+            folder=Ui.Button("Открыть папку",delegate{try{Ui.OpenFolder(View.InstallDirectory);}catch(Exception ex){notify(ex.Message);}},false);folder.Margin=new Thickness(7,0,0,0);folder.ToolTip="Открыть папку установленной версии утилиты";actions.Children.Add(folder);
             StackPanel preview=new StackPanel { VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Right };
             previewWindow=new ModulePreview(module.Manifest);preview.Children.Add(previewWindow); TextBlock caption=Ui.Text("Предпросмотр оформления",10,"Hub.Muted"); caption.HorizontalAlignment=HorizontalAlignment.Center; caption.Margin=new Thickness(0,6,0,0); preview.Children.Add(caption); Grid.SetColumn(preview,1); layout.Children.Add(preview);
             View.PropertyChanged+=Changed; Update();
@@ -203,6 +211,8 @@ namespace ReFix.Hub
             state.ToolTip=View.State=="NO"?"Не установлено":View.State=="ON"?"Состояние проверено: работает":"Установлено, выключено";
             version.Text=string.IsNullOrEmpty(View.InstalledVersion)?"Не установлена · доступна v"+View.Manifest.Version:"Установлена: v"+View.InstalledVersion+(new Version(View.Manifest.Version)>new Version(View.InstalledVersion)?" · доступна v"+View.Manifest.Version:"");
             details.Text=View.Detail??"";
+            installationPath.Text=View.InstallDirectory;installationPath.ToolTip=View.InstallDirectory;installationPath.Visibility=string.IsNullOrEmpty(View.InstallDirectory)?Visibility.Collapsed:Visibility.Visible;
+            folder.Visibility=installationPath.Visibility;folder.IsEnabled=!View.IsBusy;
             primary.Content=View.IsBusy?"Подождите…":View.State=="NO"?"Установить":View.State=="ON"?"Выключить":View.Manifest.Kind=="fix"?"Применить":"Включить";
             primary.IsEnabled=!View.IsBusy; open.IsEnabled=!View.IsBusy;
             open.Visibility=View.State=="ON" && View.Manifest.Kind!="fix"?Visibility.Visible:Visibility.Collapsed;

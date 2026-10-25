@@ -9,6 +9,15 @@ namespace ReFix.Hub
 {
     internal static class Ui
     {
+        internal static TextBox FolderPath(string path)
+        {
+            return new TextBox { Text=path,IsReadOnly=true,FontSize=11,Padding=new Thickness(6,4,6,4),Margin=new Thickness(0,6,0,0),TextWrapping=TextWrapping.Wrap,MaxHeight=76,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,ToolTip=path };
+        }
+        internal static void OpenFolder(string path)
+        {
+            if(string.IsNullOrWhiteSpace(path)||!System.IO.Directory.Exists(path))throw new System.IO.DirectoryNotFoundException("Папка не найдена. Обновите состояние утилиты.");
+            using(var process=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(System.IO.Path.GetFullPath(path)){UseShellExecute=true,Verb="open"})){}
+        }
         internal static TextBlock Text(string text, double size, string color)
         {
             TextBlock value=new TextBlock { Text=text, FontSize=size, TextWrapping=TextWrapping.Wrap };
