@@ -1,0 +1,58 @@
+name: Release
+on:
+  push:
+    tags: ['v1.0.0']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        shell: powershell
+        run: ./build.ps1 -Test
+      - name: Prepare release catalogue and portable package
+        shell: powershell
+        run: |
+          ./tools/Prepare-Release.ps1 -Tag '${{ github.ref_name }}'
+          ./tools/Package.ps1
+      - name: Publish release assets
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ github.ref_name }}' artifacts/HUB-ReFIXwin11-1.0.0.zip artifacts/packages/quiet-mixer-1.0.0.zip artifacts/packages/quick-note-1.0.0.zip artifacts/catalog.json --repo '${{ github.repository }}' --title 'HUB ReFIX 1.0.0' --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+      - name: Publish exact release catalogue to main
+        shell: powershell
+        run: |
+          # This step runs only after successful asset publication. Keep the bytes
+          # generated for those assets; rebuilding archives would change hashes.
+          $ErrorActionPreference = 'Stop'
+          function Invoke-Git {
+            & git @args
+            if ($LASTEXITCODE -ne 0) { throw "git failed: $($args -join ' ')" }
+          }
+          $catalog = Join-Path $env:GITHUB_WORKSPACE 'artifacts/catalog.json'
+          $publish = Join-Path $env:RUNNER_TEMP ("refix-catalog-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT")
+          try {
+            Invoke-Git fetch origin main
+            Invoke-Git worktree add --detach $publish origin/main
+            $directory = Join-Path $publish 'catalog'
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+            Copy-Item -LiteralPath $catalog -Destination (Join-Path $directory 'catalog.json') -Force
+            Invoke-Git -C $publish config user.name 'github-actions[bot]'
+            Invoke-Git -C $publish config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            Invoke-Git -C $publish add -- catalog/catalog.json
+            & git -C $publish diff --cached --quiet --exit-code
+            $difference = $LASTEXITCODE
+            if ($difference -eq 1) {
+              Invoke-Git -C $publish commit -m 'Publish catalogue for ${{ github.ref_name }}'
+              Invoke-Git -C $publish push origin HEAD:main
+            } elseif ($difference -ne 0) {
+              throw 'Could not compare the release catalogue'
+            }
+          } catch {
+            throw "Assets are published, but catalogue synchronization failed. Copy the published release asset catalog.json unchanged to main/catalog/catalog.json through the required branch review process. Do not rebuild packages or reuse a local catalogue. Details: $_"
+          }

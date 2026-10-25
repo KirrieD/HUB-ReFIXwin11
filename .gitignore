@@ -1,0 +1,8 @@
+artifacts/
+.vs/
+*.user
+*.log
+.superpowers/
+test-data/
+tests/*.dll
+tests/*.exe
