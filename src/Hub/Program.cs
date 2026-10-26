@@ -17,11 +17,11 @@ namespace ReFix.Hub
 {
     internal static class Startup
     {
-        private const string RunKey=@"Software\Microsoft\Windows\CurrentVersion\Run";
+        internal static string Launcher=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"HUB-ReFIX.exe");
         internal static bool Enabled
         {
-            get { try{using(RegistryKey key=Registry.CurrentUser.OpenSubKey(RunKey))return key!=null && key.GetValue("ReFIXHub")!=null;}catch(System.Security.SecurityException){return false;}catch(UnauthorizedAccessException){return false;} }
-            set { using(RegistryKey key=Registry.CurrentUser.CreateSubKey(RunKey)) { if(value)key.SetValue("ReFIXHub","\""+Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"HUB-ReFIX.exe")+"\" --background");else key.DeleteValue("ReFIXHub",false); } }
+            get { try{return !String.IsNullOrEmpty(new RegistryStartupStore().Command);}catch(System.Security.SecurityException){return false;}catch(UnauthorizedAccessException){return false;} }
+            set { StartupRegistration.SetEnabled(new RegistryStartupStore(),Launcher,value); }
         }
     }
     internal interface IHubSession
@@ -44,18 +44,30 @@ namespace ReFix.Hub
             try
             {
                 if(args.Contains("--exit")){Native.PostMessage(Native.FindWindow(null,Instance),Quit,IntPtr.Zero,IntPtr.Zero);return;}
+                int launcherIndex=Array.LastIndexOf(args,"--launcher-path");
+                if(launcherIndex>=0 && launcherIndex+1<args.Length)
+                {
+                    string candidate=Path.GetFullPath(args[launcherIndex+1]);
+                    if(File.Exists(candidate)&&String.Equals(Path.GetDirectoryName(candidate).TrimEnd(Path.DirectorySeparatorChar),AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar),StringComparison.OrdinalIgnoreCase))Startup.Launcher=candidate;
+                }
+                string startupWarning=null;
+                if(!args.Contains("--render") && String.IsNullOrEmpty(Environment.GetEnvironmentVariable("REFIX_DATA_ROOT")))
+                {
+                    try { if(!File.Exists(Startup.Launcher))Startup.Launcher=Assembly.GetExecutingAssembly().Location;StartupRegistration.Ensure(new RegistryStartupStore(),Startup.Launcher); }
+                    catch(Exception ex){Log(ex);startupWarning="Не удалось настроить автозапуск: "+ex.Message;}
+                }
                 bool created;
                 using(Mutex mutex=new Mutex(true,"Local\\"+Instance,out created))
                 {
                     if(!created){if(!args.Contains("--background"))Native.PostMessage(Native.FindWindow(null,Instance),Toggle,IntPtr.Zero,IntPtr.Zero);return;}
-                    Run(args);
+                    Run(args,startupWarning);
                 }
             }
             catch(Exception ex){Log(ex);if(!args.Contains("--background"))Forms.MessageBox.Show("Не удалось открыть HUB ReFIX.\n\n"+ex.Message,"HUB ReFIX",Forms.MessageBoxButtons.OK,Forms.MessageBoxIcon.Error);}
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static IHubSession OpenSession(ThemeStore themes,ModuleManager modules,ControlsStore controls,Action updates){return new HubSession(themes,modules,controls,updates);}
-        private static void Run(string[] args)
+        private static void Run(string[] args,string startupWarning)
         {
             Paths.Ensure();
             using(ThemeStore themes=new ThemeStore(Paths.Root))
@@ -69,6 +81,7 @@ namespace ReFix.Hub
                 GlobalKeyRegistration hubKey=null;
                 UpdateCoordinator updater=null;
                 string notice=args.Contains("--setup-verified")?"Все установлено":args.Contains("--portable-verified")?"Готово к работе · ZIP":"Требуется настройка для корректной работы";
+                if(startupWarning!=null)notice+=" · "+startupWarning;
                 string backgroundNotice=null;
                 Action<string> report=delegate(string message){notice=message;if(session!=null)session.SetNotice(message);};
                 Action checkUpdates=delegate{if(updater!=null)updater.Check(true);};

@@ -55,6 +55,9 @@ foreach ($file in $files) {
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 New-Item -Path $runKey -Force | Out-Null
 Set-ItemProperty -LiteralPath $runKey -Name 'ReFIXHub' -Value ('"' + $exe + '" --background')
+$startupSettings = 'HKCU:\Software\ReFIXHub'
+New-Item -Path $startupSettings -Force | Out-Null
+New-ItemProperty -LiteralPath $startupSettings -Name 'AutoStartEnabled' -Value 1 -PropertyType DWord -Force | Out-Null
 if (!$NoShortcut) {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'HUB ReFIX.lnk'))

@@ -19,6 +19,7 @@ namespace ReFix.Tests
         private static int Main()
         {
             Group("shared SDK",delegate{SharedTests.Run(Report);});
+            Group("portable startup",delegate{StartupTests.Run(Report);});
             Group("keyboard controls",delegate{ControlsTests.Run(Report);});
             Group("legacy mixer migration",delegate{MigrationTests.Run(Report);});
             Group("bootstrap and setup",delegate{BootstrapTests.Run(Report);});

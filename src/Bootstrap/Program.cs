@@ -40,6 +40,7 @@ namespace ReFix.Bootstrap
                     if (!audit.Success) throw new InvalidDataException(String.Join("\n", audit.Missing));
                     args = args.Where(a => a != "--setup-verified" && a != "--portable-verified").ToArray();
                     args = args.Concat(new[] { audit.IsSetup ? "--setup-verified" : "--portable-verified" }).ToArray();
+                    args = args.Concat(new[] { "--launcher-path", Assembly.GetExecutingAssembly().Location }).ToArray();
                 }
                 using (Process child = Process.Start(new ProcessStartInfo(Path.Combine(directory, "HUB-ReFIX.Core.exe"), String.Join(" ", args.Select(Quote))) { WorkingDirectory = directory, UseShellExecute = false }))
                     if (exit) { if (!child.WaitForExit(10000)) return 1; return child.ExitCode; }
@@ -114,6 +115,7 @@ namespace ReFix.Bootstrap
                     SaveLegacyMarker(parent, run);
                     run.SetValue("ReFIXHub", Program.Quote(exe) + " --background");
                 }
+                using (RegistryKey settings = Registry.CurrentUser.CreateSubKey(@"Software\ReFIXHub")) settings.SetValue("AutoStartEnabled",1,RegistryValueKind.DWord);
                 Type shellType = Type.GetTypeFromProgID("WScript.Shell");
                 dynamic shell = Activator.CreateInstance(shellType);
                 try

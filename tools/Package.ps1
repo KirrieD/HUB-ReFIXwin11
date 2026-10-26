@@ -69,7 +69,7 @@ $releaseBase = 'https://github.com/KirrieD/HUB-ReFIXwin11/releases/download/v' +
     Sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     SetupUrl=$releaseBase + [IO.Path]::GetFileName($setup)
     SetupSha256=(Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-    Notes='HUB ReFIX ' + $version + ': клавиатура закреплена справа в настройках управления. Список назначений прокручивается отдельно; клавиатура остаётся видимой.'
+    Notes='HUB ReFIX ' + $version + ': ZIP автоматически настраивает автозапуск при первом запуске. Путь обновляется после переноса папки; ручное отключение сохраняется.'
 } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $Artifacts 'update.json') -Encoding UTF8
 Write-Output "Setup executable: $setup"
 Write-Output "Update metadata: $Artifacts\update.json"

@@ -2,6 +2,7 @@
 $ErrorActionPreference='Stop'
 $root=$PSScriptRoot
 $out=Join-Path $root 'artifacts'
+if($env:REFIX_BUILD_OUTPUT){$out=[IO.Path]::GetFullPath($env:REFIX_BUILD_OUTPUT)}
 New-Item -ItemType Directory -Path $out -Force | Out-Null
 $compiler='C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe'
 if(!(Test-Path -LiteralPath $compiler)){$compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'}
@@ -23,7 +24,7 @@ $helper=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\UpdateHelper') -Filte
 Compile 'ReFix.UpdateHelper.exe' $helper @('/target:winexe',('/win32manifest:'+(Join-Path $root 'app.manifest')))
 Copy-Item -LiteralPath (Join-Path $root 'HUB-ReFIX.exe.config') -Destination $out -Force
 Copy-Item -LiteralPath (Join-Path $root 'HUB-ReFIX.Core.exe.config') -Destination $out -Force
-& (Join-Path $root 'tools\Build-Modules.ps1')
+& (Join-Path $root 'tools\Build-Modules.ps1') -Artifacts $out
 if($LASTEXITCODE -ne 0){throw 'Module build failed'}
 if($Test -or $BuildTests){
     $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.cs'|ForEach-Object FullName)
@@ -33,5 +34,5 @@ if($Test -or $BuildTests){
         if($LASTEXITCODE -ne 0){throw 'Tests failed'}
     }
 }
-if($Package){& (Join-Path $root 'tools\Package.ps1')}
+if($Package){& (Join-Path $root 'tools\Package.ps1') -Artifacts $out}
 Write-Host ('Build ready: '+$out)
