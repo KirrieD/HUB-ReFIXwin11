@@ -34,10 +34,15 @@ namespace ReFix.Hub
         {
             ThemeControls.Install(window);
         }
-        internal static void Apply(Window window, ThemeProfile profile, Border frame, FrameworkElement image)
+        internal static void Apply(Window window, ThemeProfile profile, Border frame, FrameworkElement image,bool opaqueSurface=false)
         {
             ThemeProfile resolved=ThemeProfile.Resolve(profile);
-            ThemeApplier.Apply(window,profile);
+            if(opaqueSurface)resolved.BackgroundOpacity=1;
+            ThemeApplier.Apply(window,resolved);
+            frame.SetResourceReference(Border.BackgroundProperty,"Hub.Background");
+            frame.SetResourceReference(Border.BorderBrushProperty,"Hub.Border");
+            var imageBorder=image as Border;
+            if(imageBorder!=null){imageBorder.SetResourceReference(Border.BackgroundProperty,"Hub.Image");imageBorder.CornerRadius=new CornerRadius(resolved.CornerRadius);}
             if(window.AllowsTransparency)window.Background=Brushes.Transparent;
             Color accent=((SolidColorBrush)window.Resources["Hub.Accent"]).Color;
             window.Resources["Hub.AccentText"]=new SolidColorBrush(.2126*accent.R+.7152*accent.G+.0722*accent.B>150?Colors.Black:Colors.White);

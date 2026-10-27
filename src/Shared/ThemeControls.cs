@@ -15,7 +15,7 @@ namespace ReFix.Shared
     <Setter Property='BorderThickness' Value='1'/><Setter Property='FontSize' Value='12'/>
     <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
       <Border x:Name='Frame' CornerRadius='6' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' Background='{TemplateBinding Background}' Padding='{TemplateBinding Padding}'>
-        <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
+        <ContentPresenter HorizontalAlignment='{TemplateBinding HorizontalContentAlignment}' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
       </Border>
       <ControlTemplate.Triggers>
         <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Frame' Property='Opacity' Value='0.78'/></Trigger>

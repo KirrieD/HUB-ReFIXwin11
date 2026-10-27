@@ -35,14 +35,14 @@ namespace ReFix.Hub
             notice.Margin=new Thickness(0,22,0,0);content.Children.Add(notice);
             themes.Changed+=Changed;controls.Changed+=Changed;
             Closed+=delegate{closed=true;themes.Changed-=Changed;controls.Changed-=Changed;};
-            SizeChanged+=delegate{Ui.Apply(this,themes.Current,frame,image);};Refresh();
+            SizeChanged+=delegate{Ui.Apply(this,themes.Current,frame,image,true);};Refresh();
         }
         void Add(Panel parent,string text,Action<ControlsProfile,bool> update)
         {
             var box=new CheckBox{Content=text,Margin=new Thickness(0,17,0,0)};choices.Add(box);parent.Children.Add(box);
             box.Click+=delegate{try{bool value=box.IsChecked==true;if(update==null)writeStartup(value);else{var p=controls.Current;update(p,value);controls.Save(p);}notice.Text="Изменения сохранены.";}catch(Exception ex){notice.Text=ex.Message;}Refresh();};
         }
-        void Refresh(){var p=controls.Current;choices[0].IsChecked=p.AutoHideMixer;choices[1].IsChecked=p.AutoHideTaskMenu;choices[2].IsChecked=p.AutoHideHub;choices[3].IsChecked=readStartup();choices[4].IsChecked=p.StartMixerWithHub;choices[5].IsChecked=p.StartTaskMenuWithHub;Ui.Apply(this,themes.Current,frame,image);}
+        void Refresh(){var p=controls.Current;choices[0].IsChecked=p.AutoHideMixer;choices[1].IsChecked=p.AutoHideTaskMenu;choices[2].IsChecked=p.AutoHideHub;choices[3].IsChecked=readStartup();choices[4].IsChecked=p.StartMixerWithHub;choices[5].IsChecked=p.StartTaskMenuWithHub;Ui.Apply(this,themes.Current,frame,image,true);}
         void Changed(object sender,EventArgs e){if(!closed&&!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(delegate{if(!closed)Refresh();}));}
     }
 }

@@ -24,6 +24,7 @@ namespace ReFix.Tests
             Group("scoped custom themes",delegate{ScopedThemeTests.Run(Report);});
             Group("task menu configuration and geometry",delegate{TaskMenuTests.Run(Report);});
             Group("behavior settings",delegate{BehaviorSettingsTests.Run(Report);});
+            Group("opaque settings surfaces",delegate{SettingsSurfaceTests.Run(Report);});
             Group("keyboard controls",delegate{ControlsTests.Run(Report);});
             Group("legacy mixer migration",delegate{MigrationTests.Run(Report);});
             Group("bootstrap and setup",delegate{BootstrapTests.Run(Report);});
