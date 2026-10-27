@@ -20,6 +20,10 @@ namespace ReFix.Tests
         {
             Group("shared SDK",delegate{SharedTests.Run(Report);});
             Group("portable startup",delegate{StartupTests.Run(Report);});
+            Group("embedded offline module",delegate{EmbeddedModuleTests.Run(Report);});
+            Group("scoped custom themes",delegate{ScopedThemeTests.Run(Report);});
+            Group("task menu configuration and geometry",delegate{TaskMenuTests.Run(Report);});
+            Group("behavior settings",delegate{BehaviorSettingsTests.Run(Report);});
             Group("keyboard controls",delegate{ControlsTests.Run(Report);});
             Group("legacy mixer migration",delegate{MigrationTests.Run(Report);});
             Group("bootstrap and setup",delegate{BootstrapTests.Run(Report);});
@@ -46,7 +50,7 @@ namespace ReFix.Tests
                         if(hub.StatusTimerRunning)throw new Exception("Hidden HUB must not poll status");
                         hub.Show();hub.OpenStyles();Pump();
                         if(!hub.IsEnabled || hub.StyleEditor==null || !hub.StyleEditor.IsVisible || hub.StyleEditor.Owner!=hub)throw new Exception("Editor must remain modeless while HUB is usable");
-                        ComboBox mode=Find<ComboBox>(hub.StyleEditor,null);mode.SelectedIndex=1;
+                        ComboBox mode=Find<ComboBox>(hub.StyleEditor,null);mode.SelectedIndex=1;Pump();
                         TextBox accent=Find<TextBox>(hub.StyleEditor,"Акцент HEX");accent.Text="#C64072";
                         accent.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice,0,accent,hub){RoutedEvent=Keyboard.LostKeyboardFocusEvent});
                         mode.SelectedIndex=0;mode.SelectedIndex=1;

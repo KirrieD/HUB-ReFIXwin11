@@ -32,8 +32,9 @@ namespace ReFix.Tests
                     try
                     {
                         hub.Show();hub.UpdateLayout();
-                        CheckBox auto=FindCheck(hub,"Скрывать автоматически");
-                        report("HUB exposes automatic hiding checkbox",auto!=null);
+                        hub.OpenBehavior();hub.BehaviorEditor.UpdateLayout();
+                        CheckBox auto=FindCheck(hub.BehaviorEditor,"Скрывать HUB");
+                        report("behavior settings expose HUB automatic hiding checkbox",auto!=null);
                         if(auto!=null)
                         {
                             auto.IsChecked=false;auto.RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));

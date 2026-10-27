@@ -14,7 +14,8 @@ $packages = Join-Path $Artifacts 'packages'
 New-Item -ItemType Directory -Path $packages -Force | Out-Null
 $modules = @(
     @{ Id='quiet-mixer'; Name='Микшер громкости'; Description='Громкость устройства и приложений, настраиваемая горячая клавиша.'; Source='QuietMixer'; Exe='QuietMixer.exe'; Preview='mixer' },
-    @{ Id='quick-note'; Name='Быстрая заметка'; Description='Локальная заметка с общей темой и сохранением при скрытии.'; Source='QuickNote'; Exe='QuickNote.exe'; Preview='notes' }
+    @{ Id='quick-note'; Name='Быстрая заметка'; Description='Локальная заметка с общей темой и сохранением при скрытии.'; Source='QuickNote'; Exe='QuickNote.exe'; Preview='notes' },
+    @{ Id='task-menu'; Name='Меню задач'; Description='Независимые панели файлов и папок по краям каждого экрана. Плавное раскрытие при наведении.'; Source='TaskMenu'; Exe='TaskMenu.exe'; Preview='menu' }
 )
 $versionText = Get-Content -LiteralPath (Join-Path $root 'src\Shared\ProductInfo.cs') -Raw
 if ($versionText -notmatch 'public const string Version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"') { throw 'Missing canonical product version' }

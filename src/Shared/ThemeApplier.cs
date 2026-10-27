@@ -52,6 +52,8 @@ namespace ReFix.Shared
             }}catch(IOException){}catch(NotSupportedException){}catch(ArgumentException){}catch(UnauthorizedAccessException){}
             window.Resources["Hub.Image"]=image;window.Resources["Hub.ImageBlur"]=p.ImageBlur;window.Resources["Hub.Corner"]=new CornerRadius(p.CornerRadius);window.Resources["Hub.FontSize"]=p.FontSize;
             window.SetResourceReference(Control.ForegroundProperty,"Hub.Foreground");window.SetResourceReference(Control.BackgroundProperty,"Hub.Background");window.SetResourceReference(Control.FontSizeProperty,"Hub.FontSize");window.FontFamily=p.Mode=="System"?SystemFonts.MessageFontFamily:new FontFamily("Segoe UI");
+            window.FontStyle=p.Mode=="System"?SystemFonts.MessageFontStyle:FontStyles.Normal;
+            window.FontWeight=p.Mode=="System"?SystemFonts.MessageFontWeight:FontWeights.Normal;
         }
     }
 }

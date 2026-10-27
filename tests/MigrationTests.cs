@@ -41,10 +41,10 @@ public static class MigrationTests {
    var extra=new ModuleManifest{Id="remote-only",Name="Remote module",Version="1.0.0",EntryPoint="extra.exe"};string catalog=Path.Combine(root,"catalog.json");var json=new JavaScriptSerializer();
    File.WriteAllText(catalog,json.Serialize(new CatalogDocument{SchemaVersion=1,Modules=new List<ModuleManifest>{bundled}}));File.WriteAllText(Path.Combine(data,"catalog-cache.json"),json.Serialize(new CatalogDocument{SchemaVersion=1,Modules=new List<ModuleManifest>{old,extra}}));
    using(var manager=new ModuleManager(data,catalog)){
-    var mixer=System.Linq.Enumerable.First(manager.Modules,v=>v.Manifest.Id=="quiet-mixer");if(mixer.Manifest.Version!="1.1.0"||manager.Modules.Count!=2)throw new Exception("Old cache replaced bundled upgrade or lost remote module");manager.VerifyLocalPackage(mixer);
+    var mixer=System.Linq.Enumerable.First(manager.Modules,v=>v.Manifest.Id=="quiet-mixer");if(mixer.Manifest.Version!="1.1.0"||System.Linq.Enumerable.Count(manager.Modules,v=>v.Manifest.Id!="task-menu")!=2)throw new Exception("Old cache replaced bundled upgrade or lost remote module");manager.VerifyLocalPackage(mixer);
     var merge=typeof(ModuleManager).GetMethod("MergeCatalog",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance);
     var merged=(CatalogDocument)merge.Invoke(manager,new object[]{new CatalogDocument{SchemaVersion=1,Modules=new List<ModuleManifest>{old}}});
-    if(System.Linq.Enumerable.First(merged.Modules,v=>v.Id=="quiet-mixer").Version!="1.1.0"||merged.Modules.Count!=2)throw new Exception("Older remote refresh downgraded bundle");
+    if(System.Linq.Enumerable.First(merged.Modules,v=>v.Id=="quiet-mixer").Version!="1.1.0"||System.Linq.Enumerable.Count(merged.Modules,v=>v.Id!="task-menu")!=2)throw new Exception("Older remote refresh downgraded bundle");
     var same=new ModuleManifest{Id="quiet-mixer",Name="Conflicting same version",Version="1.1.0",EntryPoint="mixer.exe",Sha256=new string('0',64)};
     merged=(CatalogDocument)merge.Invoke(manager,new object[]{new CatalogDocument{SchemaVersion=1,Modules=new List<ModuleManifest>{same}}});if(System.Linq.Enumerable.First(merged.Modules,v=>v.Id=="quiet-mixer").Sha256!=bundled.Sha256)throw new Exception("Same-version remote metadata displaced verified local bundle");
    }

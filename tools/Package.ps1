@@ -10,14 +10,14 @@ $files = @('HUB-ReFIX.exe','HUB-ReFIX.exe.config','HUB-ReFIX.Core.exe','HUB-ReFI
 $packages = @()
 $ids = @()
 foreach ($module in $catalog.Modules) {
-    if ($module.Id -cnotin @('quiet-mixer','quick-note') -or $module.Id -cin $ids -or $module.Version -cne $version -or $module.MinHubVersion -cne $version) { throw 'Unexpected module/version in catalogue' }
+    if ($module.Id -cnotin @('quiet-mixer','quick-note','task-menu') -or $module.Id -cin $ids -or $module.Version -cne $version -or $module.MinHubVersion -cne $version) { throw 'Unexpected module/version in catalogue' }
     $ids += $module.Id
     $name = $module.Id + '-' + $version + '.zip'
     $path = Join-Path $Artifacts "packages\$name"
     if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $module.Sha256) { throw "Catalogue hash mismatch: $name" }
-    $packages += $name
+    if ($module.Id -cne 'task-menu') { $packages += $name }
 }
-if ($catalog.SchemaVersion -ne 1 -or $ids.Count -ne 2) { throw 'Unexpected catalogue schema/module count' }
+if ($catalog.SchemaVersion -ne 1 -or $ids.Count -ne 3) { throw 'Unexpected catalogue schema/module count' }
 foreach ($file in $files) { if (!(Test-Path -LiteralPath (Join-Path $Artifacts $file) -PathType Leaf)) { throw "Build first: missing $file" } }
 $destination = Join-Path $Artifacts 'HUB-ReFIXwin11'
 if ([IO.Path]::GetFullPath($destination) -ne [IO.Path]::Combine($Artifacts,'HUB-ReFIXwin11')) { throw 'Invalid package destination' }
@@ -34,6 +34,9 @@ foreach ($file in $owned) {
 }
 New-Item -ItemType Directory -Path (Join-Path $destination 'packages'),(Join-Path $destination 'tools') -Force | Out-Null
 foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $Artifacts $file) -Destination $destination -Force }
+# Older updaters validate exactly these two bundled package identities. The new
+# offline menu package is embedded in Core, whose SHA256 is already verified.
+[ordered]@{ SchemaVersion=1; Modules=@($catalog.Modules | Where-Object Id -cne 'task-menu') } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $destination 'catalog.json') -Encoding UTF8
 foreach ($file in $packages) { Copy-Item -LiteralPath (Join-Path $Artifacts "packages\$file") -Destination (Join-Path $destination 'packages') -Force }
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $destination -Force
 foreach ($file in @('Install.ps1','Install.cmd','Uninstall.ps1','Uninstall.cmd')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $destination 'tools') -Force }
@@ -69,7 +72,7 @@ $releaseBase = 'https://github.com/KirrieD/HUB-ReFIXwin11/releases/download/v' +
     Sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     SetupUrl=$releaseBase + [IO.Path]::GetFileName($setup)
     SetupSha256=(Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-    Notes='HUB ReFIX ' + $version + ': ZIP автоматически настраивает автозапуск при первом запуске. Путь обновляется после переноса папки; ручное отключение сохраняется.'
+    Notes='HUB ReFIX ' + $version + ': Меню задач с плавными выдвижными панелями по краям экранов, единые настройки поведения и отдельное оформление расширений.'
 } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $Artifacts 'update.json') -Encoding UTF8
 Write-Output "Setup executable: $setup"
 Write-Output "Update metadata: $Artifacts\update.json"

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -20,9 +20,8 @@ namespace ReFix.Hub
         private readonly Dictionary<string,TextBox> typedAssignments=new Dictionary<string,TextBox>();
         private readonly Dictionary<string,TextBlock> states=new Dictionary<string,TextBlock>();
         private readonly Dictionary<string,Border> keys=new Dictionary<string,Border>();
-        private readonly CheckBox mixerStartup=new CheckBox { Content="Запускать установленный микшер вместе с HUB" };
         private string selected,capturing;
-        private bool updating,closed;
+        private bool closed;
         internal ControlsWindow(ThemeStore themeStore,ControlsStore controlStore)
         {
             themes=themeStore;controls=controlStore;Title="HUB ReFIX — управление";
@@ -44,10 +43,6 @@ namespace ReFix.Hub
                 if(group!=previous){TextBlock heading=Ui.Text(group,14,"Hub.Foreground");heading.Margin=new Thickness(0,12,0,8);content.Children.Add(heading);previous=group;}
                 content.Children.Add(ActionRow(action));
             }
-            mixerStartup.Margin=new Thickness(0,12,0,10);mixerStartup.Click+=delegate
-            {
-                if(updating)return;try{ControlsProfile p=controls.Current;p.StartMixerWithHub=mixerStartup.IsChecked==true;controls.Save(p);notice.Text="Настройка запуска сохранена.";}catch(Exception ex){notice.Text=ex.Message;Refresh();}
-            };content.Children.Add(mixerStartup);
             Button reset=Ui.Button("Восстановить стандартные клавиши",delegate
             {
                 try{capturing=null;controls.ResetDefaults();foreach(var entry in typedAssignments)entry.Value.Text=controls.Current.Get(entry.Key);Refresh();notice.Text="Стандартные назначения восстановлены.";}catch(Exception ex){notice.Text=ex.Message;}
@@ -130,7 +125,6 @@ namespace ReFix.Hub
                     states[action.Id].Text=state==null?"Не активно: программа не запущена":state.Requested!=gesture?"Применяется: "+(string.IsNullOrEmpty(gesture)?"отключение":gesture):!string.IsNullOrEmpty(state.Error)?"Конфликт. Действует: "+(state.Actual??"нет")+". "+state.Error:string.IsNullOrEmpty(state.Actual)?"Выключено":"Активно: "+state.Actual;
                 }
             }
-            updating=true;mixerStartup.IsChecked=p.StartMixerWithHub;updating=false;
             foreach(var pair in keys){pair.Value.SetResourceReference(BackgroundProperty,"Hub.Surface");pair.Value.SetResourceReference(BorderBrushProperty,"Hub.Border");((TextBlock)pair.Value.Child).SetResourceReference(TextBlock.ForegroundProperty,"Hub.Foreground");pair.Value.BorderThickness=new Thickness(1);}
             Color accent=((SolidColorBrush)FindResource("Hub.Accent")).Color,surface=((SolidColorBrush)FindResource("Hub.Surface")).Color;
             var assignedFill=new SolidColorBrush(Color.FromRgb((byte)(surface.R*.65+accent.R*.35),(byte)(surface.G*.65+accent.G*.35),(byte)(surface.B*.65+accent.B*.35)));

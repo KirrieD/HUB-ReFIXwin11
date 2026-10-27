@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -27,7 +27,7 @@ namespace ReFix.Hub
     internal interface IHubSession
     {
         bool IsVisible {get;}
-        void Show();void Toggle();void Hide();void OpenStyles();void OpenControls();void SetNotice(string message);void Render(string path);void Close();
+        void Show();void Toggle();void Hide();void OpenStyles();void OpenControls();void OpenSettings();void SetNotice(string message);void Render(string path);void Close();
     }
     internal static class Program
     {
@@ -104,8 +104,7 @@ namespace ReFix.Hub
                 };
                 hubKey=new GlobalKeyRegistration(controls,"hub.toggle",listener.Handle,100,toggle);
                 menu.Items.Add("Открыть HUB",null,delegate{show();});
-                menu.Items.Add("Оформление",null,delegate{show();session.OpenStyles();});
-                menu.Items.Add("Управление → Назначение клавиш",null,delegate{show();session.OpenControls();});
+                menu.Items.Add("Настройки",null,delegate{show();session.OpenSettings();});
                 menu.Items.Add("Проверить обновления",null,delegate{show();checkUpdates();});
                 menu.Items.Add(new Forms.ToolStripSeparator());menu.Items.Add("Выйти",null,delegate{Forms.Application.ExitThread();});
                 tray.Icon=System.Drawing.SystemIcons.Shield;refreshTray();tray.ContextMenuStrip=menu;
@@ -129,7 +128,7 @@ namespace ReFix.Hub
                     {
                         firstShow=delegate{Forms.Application.Idle-=firstShow;show();};Forms.Application.Idle+=firstShow;
                     }
-                    Task startup=Task.Run(delegate{return ResumeMixer(modules,controls);});startup.ContinueWith(delegate(Task failed){Log(failed.Exception);Interlocked.Exchange(ref backgroundNotice,"Не удалось запустить микшер: "+failed.Exception.GetBaseException().Message);Native.PostMessage(listener.Handle,0x8103,IntPtr.Zero,IntPtr.Zero);},TaskContinuationOptions.OnlyOnFaulted);
+                    Task startup=Task.Run(delegate{return ResumeModules(modules,controls);});startup.ContinueWith(delegate(Task failed){Log(failed.Exception);Interlocked.Exchange(ref backgroundNotice,"Не удалось запустить расширения: "+failed.Exception.GetBaseException().Message);Native.PostMessage(listener.Handle,0x8103,IntPtr.Zero,IntPtr.Zero);},TaskContinuationOptions.OnlyOnFaulted);
                     updater.Check(false);
                     Forms.Application.Run();
                 }
@@ -141,12 +140,31 @@ namespace ReFix.Hub
                 }
             }
         }
-        private static async Task ResumeMixer(ModuleManager manager,ControlsStore controls)
+        // Retained for existing integrations that call the original startup entry point.
+        private static Task ResumeMixer(ModuleManager manager,ControlsStore controls){return ResumeModules(manager,controls);}
+        private static async Task ResumeModules(ModuleManager manager,ControlsStore controls)
         {
-            await new LegacyMixerMigration(manager,Paths.Root).RunAsync();
-            if(!controls.Current.StartMixerWithHub)return;
-            await manager.RefreshStatesAsync();ModuleView mixer=manager.Modules.FirstOrDefault(delegate(ModuleView view){return view.Manifest.Id=="quiet-mixer";});
-            if(mixer!=null&&mixer.State=="OFF")await manager.StartAsync(mixer);
+            var errors=new System.Collections.Generic.List<Exception>();
+            try{await new LegacyMixerMigration(manager,Paths.Root).RunAsync();}catch(Exception ex){errors.Add(ex);}
+            var profile=controls.Current;
+            if(profile.StartMixerWithHub||profile.StartTaskMenuWithHub)
+            {
+                await manager.RefreshStatesAsync();
+                try{await ResumeEnabledModules(profile,manager.Modules,manager.StartAsync);}catch(AggregateException ex){errors.AddRange(ex.InnerExceptions);}
+            }
+            if(errors.Count!=0)throw new AggregateException(errors);
+        }
+        internal static async Task ResumeEnabledModules(ControlsProfile profile,System.Collections.Generic.IEnumerable<ModuleView> modules,Func<ModuleView,Task> start)
+        {
+            var errors=new System.Collections.Generic.List<Exception>();
+            foreach(string id in new[]{"quiet-mixer","task-menu"})
+            {
+                if(id=="quiet-mixer"?!profile.StartMixerWithHub:!profile.StartTaskMenuWithHub)continue;
+                ModuleView module=modules.FirstOrDefault(delegate(ModuleView view){return view.Manifest.Id==id;});
+                if(module==null||module.State!="OFF")continue;
+                try{await start(module);}catch(Exception ex){errors.Add(ex);}
+            }
+            if(errors.Count!=0)throw new AggregateException(errors);
         }
         private sealed class TrayListener:Forms.NativeWindow,IDisposable
         {

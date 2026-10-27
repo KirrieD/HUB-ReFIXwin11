@@ -17,7 +17,6 @@ $shared=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Shared') -Filter '*.c
 Compile 'ReFix.Shared.dll' $shared @('/target:library')
 $hub=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Hub') -Filter '*.cs'|ForEach-Object FullName)
 $engine=Join-Path $root 'src\UpdateHelper\UpdateEngine.cs'
-Compile 'HUB-ReFIX.Core.exe' @($hub+$engine) @('/target:winexe',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),('/win32manifest:'+(Join-Path $root 'app.manifest')))
 $bootstrap=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Bootstrap') -Filter '*.cs'|ForEach-Object FullName)
 Compile 'HUB-ReFIX.exe' $bootstrap @('/target:winexe',('/win32manifest:'+(Join-Path $root 'app.manifest')))
 $helper=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\UpdateHelper') -Filter '*.cs'|ForEach-Object FullName)
@@ -26,10 +25,17 @@ Copy-Item -LiteralPath (Join-Path $root 'HUB-ReFIX.exe.config') -Destination $ou
 Copy-Item -LiteralPath (Join-Path $root 'HUB-ReFIX.Core.exe.config') -Destination $out -Force
 & (Join-Path $root 'tools\Build-Modules.ps1') -Artifacts $out
 if($LASTEXITCODE -ne 0){throw 'Module build failed'}
+$versionText=Get-Content -LiteralPath (Join-Path $root 'src\Shared\ProductInfo.cs') -Raw
+if($versionText -notmatch 'public const string Version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"'){throw 'Missing canonical product version'}
+$menuResource='/resource:'+(Join-Path $out ('packages\task-menu-'+$Matches[1]+'.zip'))+',ReFix.TaskMenu.zip'
+Compile 'HUB-ReFIX.Core.exe' @($hub+$engine) @('/target:winexe',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),('/win32manifest:'+(Join-Path $root 'app.manifest')),$menuResource)
 if($Test -or $BuildTests){
+    Compile 'ThemeLazy.Tests.exe' @((Join-Path $root 'tests\ThemeLoadTests.cs')) @('/target:exe','/main:ReFix.Tests.ThemeLoadTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
     $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.cs'|ForEach-Object FullName)
-    Compile 'ReFix.Tests.exe' @($hub+$tests+$engine+(Join-Path $root 'src\Bootstrap\BundleAudit.cs')+(Join-Path $root 'src\Bootstrap\InstallFileTransaction.cs')) @('/target:exe','/main:ReFix.Tests.Runner',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
+    Compile 'ReFix.Tests.exe' @($hub+$tests+$engine+(Join-Path $root 'src\Bootstrap\BundleAudit.cs')+(Join-Path $root 'src\Bootstrap\InstallFileTransaction.cs')) @('/target:exe','/main:ReFix.Tests.Runner',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),$menuResource)
     if($Test){
+        & (Join-Path $out 'ThemeLazy.Tests.exe')
+        if($LASTEXITCODE -ne 0){throw 'Lazy theme startup test failed'}
         & (Join-Path $out 'ReFix.Tests.exe')
         if($LASTEXITCODE -ne 0){throw 'Tests failed'}
     }

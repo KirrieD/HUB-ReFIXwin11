@@ -48,7 +48,7 @@ public static class BackendTests {
  }
  public static void RunIntegration(Action<string,bool> report) {
   string root=Path.Combine(Path.GetFullPath("artifacts"),"backend-lifecycle-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
-  try { using(var manager=new ModuleManager(root,Path.GetFullPath("artifacts/catalog.json"))) {
+  try { using(var manager=new ModuleManager(root,Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"catalog.json"))) {
    var view=manager.Modules.First(v=>v.Manifest.Id=="quick-note");
    Action<string,Action> test=(name,body)=>{try{body();report(name,true);}catch(Exception e){Console.WriteLine(e);report(name,false);throw;}};
    try {

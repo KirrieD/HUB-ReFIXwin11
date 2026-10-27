@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -14,7 +14,7 @@ namespace ReFix.Modules
         internal readonly Border ImageLayer=new Border();
         internal ThemedSurface(UIElement content)
         {
-            Frame.Margin=new Thickness(14);
+            Frame.Margin=new Thickness(14);Frame.BorderThickness=new Thickness(1);Frame.SetResourceReference(Border.BorderBrushProperty,"Hub.Border");
             Grid layers=new Grid();
             BackgroundLayer.SetResourceReference(Border.BackgroundProperty,"Hub.Background");
             ImageLayer.SetResourceReference(Border.BackgroundProperty,"Hub.Image");

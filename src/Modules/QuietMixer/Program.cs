@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -76,7 +76,7 @@ namespace QuietMixer
             using(HwndSource source=new HwndSource(parameters))
             using(ShellListener listener=new ShellListener(source.Handle))
             using(Forms.NotifyIcon tray=new Forms.NotifyIcon())
-            using(ThemeStore themes=new ThemeStore(Paths.Root))
+            using(ThemeStore themes=new ThemeStore(Paths.Root,"quiet-mixer"))
             using(ControlsStore controls=new ControlsStore(Paths.Root))
             {
                 Action show=delegate { if(popup==null) popup=new MixerWindow(themes.Current,controls); popup.ShowAtCursor(); };

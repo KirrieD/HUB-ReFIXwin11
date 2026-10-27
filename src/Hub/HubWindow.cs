@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -23,13 +23,13 @@ namespace ReFix.Hub
         private readonly TextBlock notice=Ui.Text("Локальный каталог готов",11,"Hub.Muted");
         private readonly TextBlock summary=Ui.Text("",12,"Hub.Muted");
         private readonly TextBox search=new TextBox { MinWidth=180,MaxWidth=300,Margin=new Thickness(24,0,0,0),ToolTip="Поиск расширений и фиксов" };
-        private readonly CheckBox autoHide=new CheckBox { Content="Скрывать автоматически",Margin=new Thickness(2,4,0,4),ToolTip="Скрывать HUB при переходе в другое приложение" };
         private readonly DispatcherTimer statusTimer;
         private readonly Border frame;
         private readonly Border image;
         private readonly List<ModuleCard> views=new List<ModuleCard>();
         private StyleWindow editor;
         private ControlsWindow controlsEditor;
+        private BehaviorWindow behaviorEditor;
         private bool exiting,refreshing;
         private string filter="all";
         internal HubWindow(ThemeStore store,ModuleManager modules,ControlsStore bindings=null,Action checkUpdates=null)
@@ -53,12 +53,8 @@ namespace ReFix.Hub
             TextBlock intro=Ui.Text("Небольшие программы\nв одном месте",12,"Hub.Muted"); intro.Margin=new Thickness(0,10,0,26); nav.Children.Add(intro);
             AddNav(nav,"Все инструменты","all"); AddNav(nav,"Установленные","installed"); AddNav(nav,"Расширения","process"); AddNav(nav,"Фиксы Windows","fix");
             Border divider=new Border { Height=1,Margin=new Thickness(0,20,0,16) }; divider.SetResourceReference(Border.BackgroundProperty,"Hub.Border"); nav.Children.Add(divider);
-            Button style=Ui.Button("Оформление",OpenStyles,false); style.HorizontalContentAlignment=HorizontalAlignment.Left; nav.Children.Add(style);
-            Button manage=Ui.Button("Управление",OpenControls,false);manage.Margin=new Thickness(0,8,0,0);nav.Children.Add(manage);
+            Button settings=Ui.Button("Настройки",OpenSettings,false);settings.HorizontalContentAlignment=HorizontalAlignment.Left;nav.Children.Add(settings);
             Button refresh=Ui.Button("Обновить каталог",delegate { Run(RefreshCatalog); },false); refresh.Margin=new Thickness(0,8,0,0); nav.Children.Add(refresh);
-            CheckBox autorun=new CheckBox { Content="Автозапуск",IsChecked=Startup.Enabled,Margin=new Thickness(2,18,0,4) };
-            autorun.Click+=delegate { try { Startup.Enabled=autorun.IsChecked==true; } catch(Exception ex) { SetNotice(ex.Message); autorun.IsChecked=Startup.Enabled; } }; nav.Children.Add(autorun);
-            autoHide.Click+=delegate { try { var p=controls.Current;p.AutoHideHub=autoHide.IsChecked==true;controls.Save(p); }catch(Exception ex){SetNotice(ex.Message);autoHide.IsChecked=controls.Current.AutoHideHub;} };nav.Children.Add(autoHide);
             shortcut.Margin=new Thickness(2,14,0,0); nav.Children.Add(shortcut);RefreshControls();
             TextBlock folderLabel=Ui.Text("Папка HUB",11,"Hub.Muted");folderLabel.Margin=new Thickness(2,16,0,0);nav.Children.Add(folderLabel);
             string hubDirectory=System.IO.Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory);
@@ -127,7 +123,7 @@ namespace ReFix.Hub
             foreach(ModuleCard card in views) card.Dispose(); views.Clear(); cards.Children.Clear();
             foreach(ModuleView module in manager.Modules)
             {
-                ModuleCard card=new ModuleCard(module,manager,SetNotice,controls); views.Add(card); cards.Children.Add(card);
+                ModuleCard card=new ModuleCard(module,manager,SetNotice,controls,themes.Root); views.Add(card); cards.Children.Add(card);
             }
             if(views.Count==0) cards.Children.Add(Ui.Text("В каталоге пока нет инструментов. Обновите каталог или добавьте пакет в репозиторий.",15,"Hub.Muted"));
             foreach(ModuleCard card in views)card.ApplyPreview(themes.Current);
@@ -151,6 +147,19 @@ namespace ReFix.Hub
         internal void SetNotice(string text) { if(!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(delegate { SetNotice(text); })); return; } notice.Text=text; notice.ToolTip=text; }
         private void ThemeChanged(object sender,EventArgs e) { if(!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(delegate{ApplyTheme();if(!string.IsNullOrEmpty(themes.LastError))SetNotice("Не удалось сохранить оформление: "+themes.LastError);})); }
         private void ApplyTheme() { Ui.Apply(this,themes.Current,frame,image);foreach(ModuleCard card in views)card.ApplyPreview(themes.Current); }
+        internal void OpenSettings()
+        {
+            if(editor!=null)editor.Hide();if(controlsEditor!=null)controlsEditor.Hide();if(behaviorEditor!=null)behaviorEditor.Hide();
+            var selector=new SettingsWindow(themes){Owner=this};
+            if(selector.ShowDialog()!=true)return;
+            if(selector.Selection=="controls")OpenControls();else if(selector.Selection=="styles")OpenStyles();else if(selector.Selection=="behavior")OpenBehavior();
+        }
+        internal void OpenBehavior()
+        {
+            if(behaviorEditor==null){behaviorEditor=new BehaviorWindow(themes,controls);behaviorEditor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(behaviorEditor);behaviorEditor.Closed+=delegate{behaviorEditor=null;};}
+            behaviorEditor.Show();behaviorEditor.Activate();
+        }
+        internal BehaviorWindow BehaviorEditor{get{return behaviorEditor;}}
         internal void OpenStyles()
         {
             if(editor==null) { editor=new StyleWindow(themes); editor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(editor); editor.Closed+=delegate { editor=null; }; }
@@ -164,10 +173,10 @@ namespace ReFix.Hub
         }
         internal ControlsWindow ControlsEditor {get{return controlsEditor;}}
         private void ControlsChanged(object sender,EventArgs e){if(!exiting&&!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(delegate{if(!exiting)RefreshControls();}));}
-        private void RefreshControls(){autoHide.IsChecked=controls.Current.AutoHideHub;HotkeyRuntimeStatus state=controls.GetRuntime("hub.toggle");string key=state==null?controls.Current.Get("hub.toggle"):state.Actual;shortcut.Text=(string.IsNullOrEmpty(key)?"Показ через трей":key)+"\nКрестик скрывает HUB";}
+        private void RefreshControls(){HotkeyRuntimeStatus state=controls.GetRuntime("hub.toggle");string key=state==null?controls.Current.Get("hub.toggle"):state.Actual;shortcut.Text=(string.IsNullOrEmpty(key)?"Показ через трей":key)+"\nКрестик скрывает HUB";}
         internal void ShowHub() { Show(); WindowState=WindowState.Normal; Native.SetForegroundWindow(new WindowInteropHelper(this).Handle); Activate(); }
-        internal void HideHub() { if(editor!=null) editor.Hide();if(controlsEditor!=null)controlsEditor.Hide(); Hide(); }
-        internal void Exit() { exiting=true; if(editor!=null) editor.Close();if(controlsEditor!=null)controlsEditor.Close(); Close(); }
+        internal void HideHub() { if(editor!=null) editor.Hide();if(controlsEditor!=null)controlsEditor.Hide();if(behaviorEditor!=null)behaviorEditor.Hide(); Hide(); }
+        internal void Exit() { exiting=true; if(editor!=null) editor.Close();if(controlsEditor!=null)controlsEditor.Close();if(behaviorEditor!=null)behaviorEditor.Close(); Close(); }
         internal bool StatusTimerRunning { get { return statusTimer.IsEnabled; } }
     }
 
@@ -181,7 +190,7 @@ namespace ReFix.Hub
         private readonly Button primary,open,update,remove,folder;
         private readonly TextBox installationPath;
         private readonly ModulePreview previewWindow;
-        internal ModuleCard(ModuleView module,ModuleManager service,Action<string> notice,ControlsStore bindings)
+        internal ModuleCard(ModuleView module,ModuleManager service,Action<string> notice,ControlsStore bindings,string themeRoot=null)
         {
             View=module; manager=service; notify=notice;
             controls=bindings;
@@ -201,7 +210,7 @@ namespace ReFix.Hub
             remove=Ui.Button("Удалить утилиту",Uninstall,false);remove.Margin=new Thickness(7,0,0,0);remove.ToolTip="Остановить утилиту и удалить её файлы. Личные данные сохраняются.";actions.Children.Add(remove);
             folder=Ui.Button("Открыть папку",delegate{try{Ui.OpenFolder(View.InstallDirectory);}catch(Exception ex){notify(ex.Message);}},false);folder.Margin=new Thickness(7,0,0,0);folder.ToolTip="Открыть папку установленной версии утилиты";actions.Children.Add(folder);
             StackPanel preview=new StackPanel { VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Right };
-            previewWindow=new ModulePreview(module.Manifest);preview.Children.Add(previewWindow); TextBlock caption=Ui.Text("Предпросмотр оформления",10,"Hub.Muted"); caption.HorizontalAlignment=HorizontalAlignment.Center; caption.Margin=new Thickness(0,6,0,0); preview.Children.Add(caption); Grid.SetColumn(preview,1); layout.Children.Add(preview);
+            previewWindow=new ModulePreview(module.Manifest,themeRoot);preview.Children.Add(previewWindow); TextBlock caption=Ui.Text("Предпросмотр оформления",10,"Hub.Muted"); caption.HorizontalAlignment=HorizontalAlignment.Center; caption.Margin=new Thickness(0,6,0,0); preview.Children.Add(caption); Grid.SetColumn(preview,1); layout.Children.Add(preview);
             View.PropertyChanged+=Changed; Update();
         }
         private void Changed(object sender,PropertyChangedEventArgs e) { if(!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(Update)); }
@@ -226,17 +235,17 @@ namespace ReFix.Hub
             string message="Удалить «"+View.Manifest.Name+"»? Работающая утилита будет остановлена. Личные данные и оформление сохранятся.";
             MessageBoxResult decision=owner==null?MessageBox.Show(message,"Удаление утилиты",MessageBoxButton.YesNo,MessageBoxImage.Question):MessageBox.Show(owner,message,"Удаление утилиты",MessageBoxButton.YesNo,MessageBoxImage.Question);
             if(decision!=MessageBoxResult.Yes)return;
-            Run(async delegate { await manager.UninstallAsync(View);if(View.Manifest.Id=="quiet-mixer"){var p=controls.Current;p.StartMixerWithHub=false;controls.Save(p);} });
+            Run(async delegate { await manager.UninstallAsync(View);if(View.Manifest.Id=="quiet-mixer"||View.Manifest.Id=="task-menu"){var p=controls.Current;if(View.Manifest.Id=="quiet-mixer")p.StartMixerWithHub=false;else p.StartTaskMenuWithHub=false;controls.Save(p);} });
         }
         private void InvokePrimary(){Run(async delegate
         {
             if(View.State=="NO"){await manager.InstallAsync(View);return;}
             bool enable=View.State!="ON";if(enable)await manager.StartAsync(View);else await manager.StopAsync(View);
-            if(View.Manifest.Id=="quiet-mixer"){ControlsProfile profile=controls.Current;profile.StartMixerWithHub=enable;controls.Save(profile);}
+            if(View.Manifest.Id=="quiet-mixer"||View.Manifest.Id=="task-menu"){ControlsProfile profile=controls.Current;if(View.Manifest.Id=="quiet-mixer")profile.StartMixerWithHub=enable;else profile.StartTaskMenuWithHub=enable;controls.Save(profile);}
             if(enable&&View.Manifest.Kind=="process")await manager.ShowAsync(View);
         });}
         internal void ApplyPreview(ThemeProfile profile){previewWindow.ApplyTheme(profile);}
         private async void Run(Func<Task> action) { try { await action(); notify("Готово: "+View.Manifest.Name); } catch(Exception ex) { notify(ex.Message); } finally { Update(); } }
-        public void Dispose() { View.PropertyChanged-=Changed; }
+        public void Dispose() { View.PropertyChanged-=Changed;previewWindow.Dispose(); }
     }
 }

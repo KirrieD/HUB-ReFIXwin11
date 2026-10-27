@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -68,7 +68,7 @@ namespace QuietMixer
             timer = new DispatcherTimer { Interval=TimeSpan.FromSeconds(1) };
             timer.Tick += delegate { RefreshAudio(); };
             IsVisibleChanged += delegate { if (IsVisible) { RefreshAudio(); timer.Start(); } else { timer.Stop(); ReleaseAudio(); } };
-            Deactivated += delegate { if (!closing && !positioning && !ContextMenuOpen()) Hide(); };
+            Deactivated += delegate { if (!closing && !positioning && this.controls.Current.AutoHideMixer && !ContextMenuOpen()) Hide(); };
             PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (KeyChord.Parse(this.controls.Current.Get("quiet-mixer.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)) { Hide(); e.Handled=true; } };
             SourceInitialized += delegate { ApplyCorners(); };
             Closed += delegate { closing=true;this.controls.Changed-=controlsChanged;if(ownsControls)this.controls.Dispose();timer.Stop(); ReleaseAudio(); };
