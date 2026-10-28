@@ -31,11 +31,21 @@ $menuResource='/resource:'+(Join-Path $out ('packages\task-menu-'+$Matches[1]+'.
 Compile 'HUB-ReFIX.Core.exe' @($hub+$engine) @('/target:winexe',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),('/win32manifest:'+(Join-Path $root 'app.manifest')),$menuResource)
 if($Test -or $BuildTests){
     Compile 'ThemeLazy.Tests.exe' @((Join-Path $root 'tests\ThemeLoadTests.cs')) @('/target:exe','/main:ReFix.Tests.ThemeLoadTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
+    $gridUi=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Modules\TaskMenu') -Filter '*.cs'|ForEach-Object FullName)
+    $gridUi+=(Join-Path $root 'src\Modules\ThemedSurface.cs'),(Join-Path $root 'tests\TaskMenuGridUiTests.cs')
+    Compile 'TaskMenuGrid.Ui.Tests.exe' $gridUi @('/target:exe','/define:TASK_MENU_GRID_UI_FIXTURE','/main:ReFix.Tests.TaskMenuGridUiTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
+    $mixerUi=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Modules\QuietMixer') -Filter '*.cs'|ForEach-Object FullName)
+    $mixerUi+=(Join-Path $root 'src\Modules\ThemedSurface.cs'),(Join-Path $root 'tests\MixerLayoutUiTests.cs')
+    Compile 'MixerLayout.Ui.Tests.exe' @($hub+$engine+$mixerUi) @('/target:exe','/define:MIXER_LAYOUT_UI_FIXTURE,MIXER_LAYOUT_EDITOR_UI_FIXTURE','/main:ReFix.Tests.MixerLayoutUiTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
     $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.cs'|ForEach-Object FullName)
     Compile 'ReFix.Tests.exe' @($hub+$tests+$engine+(Join-Path $root 'src\Bootstrap\BundleAudit.cs')+(Join-Path $root 'src\Bootstrap\InstallFileTransaction.cs')) @('/target:exe','/main:ReFix.Tests.Runner',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),$menuResource)
     if($Test){
         & (Join-Path $out 'ThemeLazy.Tests.exe')
         if($LASTEXITCODE -ne 0){throw 'Lazy theme startup test failed'}
+        & (Join-Path $out 'TaskMenuGrid.Ui.Tests.exe')
+        if($LASTEXITCODE -ne 0){throw 'Task menu grid UI tests failed'}
+        & (Join-Path $out 'MixerLayout.Ui.Tests.exe')
+        if($LASTEXITCODE -ne 0){throw 'Mixer layout UI tests failed'}
         & (Join-Path $out 'ReFix.Tests.exe')
         if($LASTEXITCODE -ne 0){throw 'Tests failed'}
     }

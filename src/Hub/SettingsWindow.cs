@@ -10,23 +10,32 @@ namespace ReFix.Hub
     {
         readonly ThemeStore themes;readonly Border frame,image;readonly Grid layers;bool closed;
         internal string Selection{get;private set;}
-        internal SettingsWindow(ThemeStore themes)
+        internal SettingsWindow(ThemeStore themes,bool appearance=false)
         {
             this.themes=themes;Title="HUB ReFIX — настройки";
-            Width=Math.Min(640,SystemParameters.WorkArea.Width);Height=Math.Min(500,SystemParameters.WorkArea.Height);
+            Width=Math.Min(640,SystemParameters.WorkArea.Width);Height=Math.Min(appearance?420:590,SystemParameters.WorkArea.Height);MinWidth=420;
             ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;WindowStartupLocation=WindowStartupLocation.CenterOwner;
             WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;
             Ui.Styles(this);frame=new Border{Margin=new Thickness(16),BorderThickness=new Thickness(1)};Content=frame;
             layers=new Grid();frame.Child=layers;image=new Border{IsHitTestVisible=false};layers.Children.Add(image);
             Grid shell=new Grid{Margin=new Thickness(24)};shell.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});shell.RowDefinitions.Add(new RowDefinition());shell.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});layers.Children.Add(shell);
             Grid title=new Grid{Margin=new Thickness(0,0,0,22),Background=Brushes.Transparent};title.ColumnDefinitions.Add(new ColumnDefinition());title.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
-            StackPanel heading=new StackPanel();heading.Children.Add(Ui.Text("Настройки",27,"Hub.Foreground"));var subtitle=Ui.Text("Управление HUB и расширениями",12,"Hub.Muted");subtitle.Margin=new Thickness(0,6,0,0);heading.Children.Add(subtitle);title.Children.Add(heading);
+            StackPanel heading=new StackPanel();heading.Children.Add(Ui.Text(appearance?"Оформление":"Настройки",27,"Hub.Foreground"));var subtitle=Ui.Text(appearance?"Выберите, что настроить":"Управление HUB и расширениями",12,"Hub.Muted");subtitle.Margin=new Thickness(0,6,0,0);heading.Children.Add(subtitle);title.Children.Add(heading);
             Button close=Ui.Button("✕",Close,false);close.Width=34;close.Height=34;close.MinHeight=0;close.Padding=new Thickness(0);close.VerticalAlignment=VerticalAlignment.Top;close.ToolTip="Закрыть настройки";System.Windows.Automation.AutomationProperties.SetName(close,"Закрыть настройки");Grid.SetColumn(close,1);title.Children.Add(close);shell.Children.Add(title);
             title.MouseLeftButtonDown+=delegate(object sender,MouseButtonEventArgs e){if(e.ChangedButton==MouseButton.Left)try{DragMove();}catch(InvalidOperationException){}};
             StackPanel sections=new StackPanel();
-            Add(sections,"\uE765","Управление","Назначение клавиш HUB и утилит","controls");
-            Add(sections,"\uE790","Оформление","Тема, цвета и внешний вид расширений","styles");
-            Add(sections,"\uE713","Поведение","Автозапуск и автоматическое скрытие","behavior");
+            if(appearance)
+            {
+                Add(sections,"\uE790","Общее оформление","Тема, цвета и стиль HUB и расширений","styles");
+                Add(sections,"\uE767","Вид микшера","Размер окна, текста и ползунков","mixer-layout");
+            }
+            else
+            {
+                Add(sections,"\uE765","Управление","Назначение клавиш HUB и утилит","controls");
+                Add(sections,"\uE790","Оформление","Общий стиль и параметры микшера","appearance");
+                Add(sections,"\uE713","Поведение","Автозапуск и автоматическое скрытие","behavior");
+                Add(sections,"\uE774","Ссылки","Папки и источники расширений","links");
+            }
             var scroll=new ScrollViewer{Content=sections,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetRow(scroll,1);shell.Children.Add(scroll);
             var footer=Ui.Text("HUB ReFIX · v"+ProductInfo.Version,11,"Hub.Muted");footer.Margin=new Thickness(0,16,0,0);Grid.SetRow(footer,2);shell.Children.Add(footer);
             PreviewKeyDown+=delegate(object sender,KeyEventArgs e){if(e.Key==Key.Escape){Close();e.Handled=true;}};

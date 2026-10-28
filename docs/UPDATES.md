@@ -1,5 +1,9 @@
 # HUB updates
 
+## Module updates from 1.3.0
+
+The Update action is available for installed ON and OFF modules. HUB downloads and verifies the candidate before stopping a running module. It then requests a graceful stop, promotes the staged files, verifies the new process and publishes its installed version. A previously running utility restarts and opens; an OFF utility remains OFF. Failed activation restores the previous files and running state. Process identity is checked before control commands; unrelated processes are never terminated. External updates must still belong to a currently configured source and match the installed module's origin. Updating HUB itself does not automatically replace installed utility packages.
+
 HUB 1.1.0 checks once on startup and when the user selects **Проверить обновления**. It reads the fixed public GitHub latest-release API for `KirrieD/HUB-ReFIXwin11`, locates `update.json`, and offers a newer version. Acceptance is required before downloading. Cancel leaves the running installation unchanged. The first upgrade from the old 1.0 executable requires a manual ZIP or Setup upgrade.
 
 Metadata schema 1 contains `Version`, `PackageUrl`, `Sha256`, `SetupUrl`, `SetupSha256`, and `Notes`. Package and Setup URLs must be HTTPS assets of this repository. Metadata is limited to 1 MiB; archive download to 128 MiB; expanded content to 512 MiB and 4096 ZIP entries. GitHub asset redirects are explicitly checked against HTTPS GitHub asset hosts, with bounded redirect count and timeouts. No credentials are used.

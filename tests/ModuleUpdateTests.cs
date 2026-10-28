@@ -1,0 +1,53 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Reflection;
+using System.Threading.Tasks;
+using System.Web.Script.Serialization;
+using ReFix.Hub;
+using ReFix.Shared;
+
+internal static class ModuleUpdateTests
+{
+ internal static void Run(Action<string,bool> report)
+ {
+  string root=Path.Combine(Path.GetFullPath("artifacts"),"module-update-tests-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+  try {
+   Build(Path.Combine(root,"good.exe"),false,false);Build(Path.Combine(root,"bad.exe"),true,false);Build(Path.Combine(root,"fix.exe"),false,true);
+   Action<string,Action<Fixture>> test=(name,body)=>{try{using(var fixture=new Fixture(root,name.Contains("fix"),name.Contains("removed source")))body(fixture);report(name,true);}catch(Exception e){Console.WriteLine(e);report(name,false);}};
+   test("module update restarts ON with new package and retains data",f=>{f.Start();int pid=f.Pid();var changes=new List<string>();f.View.PropertyChanged+=(s,e)=>{if(e.PropertyName=="State")changes.Add(f.View.State);};f.Update();f.Assert("ON","2.0.0");if(f.Pid()==pid||changes.Contains("OFF"))throw new Exception("Update did not replace runtime cleanly.");});
+   test("module update leaves OFF package stopped",f=>{f.Update();f.Assert("OFF","2.0.0");if(File.Exists(f.StateFile))throw new Exception("OFF update launched a process.");});
+   test("module update rejects hash before stopping old process",f=>{f.Start();int pid=f.Pid();f.View.Manifest.Sha256=new string('0',64);Reject(f.Update);f.Assert("ON","1.0.0");if(f.Pid()!=pid)throw new Exception("Download validation stopped the old process.");});
+   test("module update preflights archive before stopping old process",f=>{f.Start();int pid=f.Pid();File.Delete(f.NewPackage);using(var z=ZipFile.Open(f.NewPackage,ZipArchiveMode.Create))z.CreateEntry("../escape");f.View.Manifest.Sha256=PackageSafety.Hash(f.NewPackage);Reject(f.Update);f.Assert("ON","1.0.0");if(f.Pid()!=pid)throw new Exception("Archive validation stopped the old process.");});
+   test("module update rejects configured cross-origin package before stopping",f=>{f.Start();int pid=f.Pid();f.ConfigureCrossRepository("https://git.example/other/repository");Reject(f.Update);f.Assert("ON","1.0.0");if(f.Pid()!=pid)throw new Exception("Cross-origin update stopped the old process.");});
+   test("module update rejects removed source despite adjacent package",f=>{f.Start();int pid=f.Pid();new SharedSourceStore(f.Data).Save(new SourceSnapshot(new string[0],new RepositorySource[0]));Reject(f.Update);f.Assert("ON","1.0.0");if(f.Pid()!=pid)throw new Exception("Removed-source update stopped the old process.");});
+   test("module update activation failure restores old package and running health",f=>{f.Start();f.UseBadPackage();Reject(f.Update);f.Assert("ON","1.0.0");if(Directory.Exists(Path.Combine(f.Data,"modules","update-test","2.0.0")))throw new Exception("Failed package was retained as active candidate.");});
+   test("module update refuses a foreign live process identity",f=>{using(var process=Process.GetCurrentProcess()){File.WriteAllText(f.StateFile,new JavaScriptSerializer().Serialize(new{id="update-test",pid=process.Id,startedUtc=process.StartTime.ToUniversalTime().Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture),protocol=1}));Reject(f.Update);if(process.HasExited||f.View.InstalledVersion!="1.0.0")throw new Exception("Foreign process or previous package changed.");File.Delete(f.StateFile);}f.Assert("OFF","1.0.0");});
+   test("fix update disables old fix then restores ON",f=>{f.Start();f.Update();f.Assert("ON","2.0.0");if(File.ReadAllText(Path.Combine(f.Data,"fix-log"))!="enable:1.0.0;disable:1.0.0;enable:2.0.0;")throw new Exception("Fix activation order is wrong.");});
+   test("fix update preserves old ON installation when disable rejected",f=>{f.Start();File.WriteAllText(Path.Combine(f.Data,"reject-disable"),"yes");Reject(f.Update);f.Assert("ON","1.0.0");});
+  } finally {if(Directory.Exists(root))Directory.Delete(root,true);}
+ }
+ sealed class Fixture:IDisposable
+ {
+  internal string Data,NewPackage,StateFile;internal ModuleView View;readonly ModuleManager manager;readonly string directory;readonly bool fix;
+  internal Fixture(string root,bool isFix,bool localSource){fix=isFix;directory=Path.Combine(root,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);Directory.CreateDirectory(Path.Combine(directory,"packages"));Data=Path.Combine(directory,"data");var old=Manifest("1.0.0");Package(root,old,false);var next=Manifest("2.0.0");NewPackage=Package(root,next,false);string catalog=Path.Combine(directory,"catalog.json");File.WriteAllText(catalog,new JavaScriptSerializer().Serialize(new CatalogDocument{SchemaVersion=1,Modules=new List<ModuleManifest>{old}}));if(localSource){next.SourceFolder=directory;new SharedSourceStore(Data).Save(new SourceSnapshot(new[]{directory},new RepositorySource[0]));catalog=Path.Combine(directory,"official.json");File.WriteAllText(catalog,"{\"SchemaVersion\":1,\"Modules\":[]}");}manager=new ModuleManager(Data,catalog);View=manager.Modules.First(v=>v.Manifest.Id=="update-test");manager.InstallAsync(View).GetAwaiter().GetResult();View.Manifest=next;Directory.CreateDirectory(Path.Combine(Data,"notes"));File.WriteAllText(Path.Combine(Data,"notes","keep"),"personal");StateFile=Path.Combine(Data,"state","update-test.json");}
+  ModuleManifest Manifest(string version){return new ModuleManifest{Id="update-test",Name="Update test",Version=version,Kind=fix?"fix":"process",EntryPoint="module.exe",Preview=fix?"fix":"notes"};}
+  string Package(string root,ModuleManifest manifest,bool bad){string path=Path.Combine(directory,"packages","update-test-"+manifest.Version+".zip");if(File.Exists(path))File.Delete(path);using(var zip=ZipFile.Open(path,ZipArchiveMode.Create)){zip.CreateEntryFromFile(Path.Combine(root,fix?"fix.exe":bad?"bad.exe":"good.exe"),"module.exe");zip.CreateEntryFromFile(typeof(ModuleRuntime).Assembly.Location,"ReFix.Shared.dll");var marker=zip.CreateEntry("version.txt");using(var w=new StreamWriter(marker.Open()))w.Write(manifest.Version);}manifest.Sha256=PackageSafety.Hash(path);return path;}
+  internal void UseBadPackage(){Package(Path.GetDirectoryName(directory),View.Manifest,true);}
+  internal void ConfigureCrossRepository(string repository){View.Manifest.SourceRepository=repository;View.Manifest.PackageUrl=repository+"/releases/v2/module.zip";new SharedSourceStore(Data).Save(new SourceSnapshot(new string[0],new[]{new RepositorySource(repository,"")}));manager.SourceFetch=(url,max,package)=>File.ReadAllBytes(NewPackage);}
+  internal void Start(){manager.StartAsync(View).GetAwaiter().GetResult();}
+  internal void Update(){var method=typeof(ModuleManager).GetMethod("UpdateAsync");if(method==null)throw new Exception("ModuleManager.UpdateAsync missing");try{((Task)method.Invoke(manager,new object[]{View})).GetAwaiter().GetResult();}catch(TargetInvocationException e){throw e.InnerException;}}
+  internal int Pid(){return Convert.ToInt32(new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(File.ReadAllText(StateFile))["pid"]);}
+  internal void Assert(string state,string version){manager.RefreshStatesAsync().GetAwaiter().GetResult();if(View.State!=state||View.InstalledVersion!=version||View.IsBusy)throw new Exception("Expected "+state+" "+version+"; got "+View.State+" "+View.InstalledVersion+" "+View.Detail);if(File.ReadAllText(Path.Combine(Data,"notes","keep"))!="personal")throw new Exception("User data lost.");if(File.ReadAllText(Path.Combine(View.InstallDirectory,"version.txt"))!=version)throw new Exception("Current files differ from pointer.");}
+  public void Dispose(){try{if(fix)File.Delete(Path.Combine(Data,"reject-disable"));manager.StopAsync(View).GetAwaiter().GetResult();}catch{}manager.Dispose();}
+ }
+ static void Reject(Action action){try{action();}catch(Exception e){if(e.Message.Contains("UpdateAsync missing"))throw;return;}throw new Exception("Expected update rejection.");}
+ static void Build(string output,bool broken,bool fix)
+ {
+  string code=fix?@"using System;using System.IO;using System.Web.Script.Serialization;class Program{static void Main(string[] args){string root=Environment.GetEnvironmentVariable(""REFIX_DATA_ROOT""),p=Path.Combine(root,""fix-state""),version=File.ReadAllText(""version.txt"");if(args[0]==""--enable""){File.WriteAllText(p,""ON"");File.AppendAllText(Path.Combine(root,""fix-log""),""enable:""+version+"";"");}if(args[0]==""--disable""&&!File.Exists(Path.Combine(root,""reject-disable""))){File.WriteAllText(p,""OFF"");File.AppendAllText(Path.Combine(root,""fix-log""),""disable:""+version+"";"");}Console.WriteLine(new JavaScriptSerializer().Serialize(new{id=""update-test"",protocol=1,state=File.Exists(p)?File.ReadAllText(p):""OFF""}));}}":broken?"class Program{static void Main(){}}":@"using System;using System.Threading;using ReFix.Shared;class Program{static void Main(){using(var done=new ManualResetEvent(false))using(var runtime=new ModuleRuntime(""update-test"",()=>{},()=>done.Set())){runtime.Start();done.WaitOne();}}}";
+  using(var provider=new Microsoft.CSharp.CSharpCodeProvider()){var options=new System.CodeDom.Compiler.CompilerParameters(new[]{"System.dll","System.Core.dll","System.Web.Extensions.dll",typeof(ModuleRuntime).Assembly.Location},output){GenerateExecutable=true};var result=provider.CompileAssemblyFromSource(options,code);if(result.Errors.HasErrors)throw new Exception(string.Join(";",result.Errors.Cast<System.CodeDom.Compiler.CompilerError>().Select(e=>e.ToString())));}
+ }
+}

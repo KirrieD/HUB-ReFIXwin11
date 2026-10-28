@@ -32,6 +32,16 @@ namespace ReFix.Tests
                     try
                     {
                         hub.Show();hub.UpdateLayout();
+                        var settingsButton=FindButton(hub,"Настройки");report("HUB settings caption is centered",settingsButton!=null&&settingsButton.HorizontalContentAlignment==HorizontalAlignment.Center);
+                        var operation=Find<TextBlock>(hub,delegate(TextBlock t){return System.Windows.Automation.AutomationProperties.GetName(t)=="Состояние обновлений и операций";});
+                        report("operation status has prominent wrapping text",operation!=null&&operation.FontSize>=13&&operation.FontWeight==FontWeights.SemiBold&&operation.TextWrapping==TextWrapping.Wrap);
+                        report("HUB folder controls are removed from sidebar",Find<TextBox>(hub,delegate(TextBox t){return System.Windows.Automation.AutomationProperties.GetName(t)=="Папка HUB";})==null);
+                        hub.OpenLinks();hub.LinksEditor.UpdateLayout();
+                        var official=Find<TextBox>(hub.LinksEditor,delegate(TextBox t){return t.Text==SharedSourceStore.OfficialRepository;});
+                        var hubPath=Find<TextBox>(hub.LinksEditor,delegate(TextBox t){return t.Text==AppDomain.CurrentDomain.BaseDirectory;});
+                        report("links expose immutable official repository and HUB path",official!=null&&official.IsReadOnly&&hubPath!=null&&hubPath.IsReadOnly&&FindButton(hub.LinksEditor,"Открыть папку HUB")!=null);
+                        var ownerBounds=Bounds(hub);var linksBounds=Bounds(hub.LinksEditor);report("actual settings window sits beside HUB",linksBounds.Right+8<=ownerBounds.Left||linksBounds.Left>=ownerBounds.Right+8);
+                        hub.LinksEditor.Close();
                         hub.OpenBehavior();hub.BehaviorEditor.UpdateLayout();
                         CheckBox auto=FindCheck(hub.BehaviorEditor,"Скрывать HUB");
                         report("behavior settings expose HUB automatic hiding checkbox",auto!=null);
@@ -50,6 +60,11 @@ namespace ReFix.Tests
                                 report("uninstalled module does not offer deletion: "+view.Manifest.Id,remove!=null&&remove.Visibility==Visibility.Collapsed);
                                 view.InstalledVersion=view.Manifest.Version;view.State="OFF";card.Update();
                                 report("installed module offers deletion: "+view.Manifest.Id,remove!=null&&remove.Visibility==Visibility.Visible&&remove.IsEnabled);
+                                view.InstalledVersion="0.0.1";view.State="ON";card.Update();var update=FindButton(card,"Обновить");
+                                report("active module can be updated without manual stop: "+view.Manifest.Id,update!=null&&update.Visibility==Visibility.Visible&&update.IsEnabled);
+                                var version=Find<TextBlock>(card,delegate(TextBlock t){return t.Text.Contains("доступна v");});
+                                bool bold=false;if(version!=null)foreach(var inline in version.Inlines){var run=inline as System.Windows.Documents.Run;if(run!=null&&run.Text.Contains("доступна v")&&run.FontSize>=14&&run.FontWeight==FontWeights.Bold)bold=true;}
+                                report("available version is larger and bold: "+view.Manifest.Id,bold);
                                 view.IsBusy=true;card.Update();
                                 report("busy module cannot be deleted: "+view.Manifest.Id,remove!=null&&!remove.IsEnabled);
                             }
@@ -71,5 +86,9 @@ namespace ReFix.Tests
             var match=root as Button;if(match!=null&&Convert.ToString(match.Content)==caption)return match;
             for(int i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var found=FindButton(VisualTreeHelper.GetChild(root,i),caption);if(found!=null)return found;}return null;
         }
+        static T Find<T>(DependencyObject root,Func<T,bool> match) where T:DependencyObject{var value=root as T;if(value!=null&&match(value))return value;for(int i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var found=Find<T>(VisualTreeHelper.GetChild(root,i),match);if(found!=null)return found;}return null;}
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]struct RECT{internal int Left,Top,Right,Bottom;}
+        [System.Runtime.InteropServices.DllImport("user32.dll")]static extern bool GetWindowRect(IntPtr window,out RECT rect);
+        static Rect Bounds(Window window){RECT r;GetWindowRect(new System.Windows.Interop.WindowInteropHelper(window).Handle,out r);return new Rect(r.Left,r.Top,Math.Max(0,r.Right-r.Left),Math.Max(0,r.Bottom-r.Top));}
     }
 }

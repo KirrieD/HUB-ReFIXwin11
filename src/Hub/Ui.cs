@@ -39,6 +39,7 @@ namespace ReFix.Hub
             ThemeProfile resolved=ThemeProfile.Resolve(profile);
             if(opaqueSurface)resolved.BackgroundOpacity=1;
             ThemeApplier.Apply(window,resolved);
+            var notice=ThemeApplier.ColorBrush(resolved.Tertiary).Clone();notice.Opacity=.10;notice.Freeze();window.Resources["Hub.NoticeBackground"]=notice;
             frame.SetResourceReference(Border.BackgroundProperty,"Hub.Background");
             frame.SetResourceReference(Border.BorderBrushProperty,"Hub.Border");
             var imageBorder=image as Border;

@@ -23,8 +23,13 @@ namespace ReFix.Tests
             Group("embedded offline module",delegate{EmbeddedModuleTests.Run(Report);});
             Group("scoped custom themes",delegate{ScopedThemeTests.Run(Report);});
             Group("task menu configuration and geometry",delegate{TaskMenuTests.Run(Report);});
+            Group("task menu block grid",delegate{TaskMenuGridTests.Run(Report);});
             Group("behavior settings",delegate{BehaviorSettingsTests.Run(Report);});
             Group("opaque settings surfaces",delegate{SettingsSurfaceTests.Run(Report);});
+            Group("HUB presentation and placement",delegate{HubPresentationTests.Run(Report);});
+            Group("mixer layout settings",delegate{MixerLayoutTests.Run(Report);});
+            Group("extension sources",delegate{ExtensionSourcesTests.Run(Report);});
+            Group("active module updates",delegate{ModuleUpdateTests.Run(Report);});
             Group("keyboard controls",delegate{ControlsTests.Run(Report);});
             Group("legacy mixer migration",delegate{MigrationTests.Run(Report);});
             Group("bootstrap and setup",delegate{BootstrapTests.Run(Report);});

@@ -37,6 +37,9 @@ namespace ReFix.Hub
             hub.OpenBehavior();Pump();Capture(hub.BehaviorEditor,Path.Combine(path,"behavior.png"));
             var selector=new SettingsWindow(themes){Owner=hub};
             try{selector.Show();Pump();Capture(selector,Path.Combine(path,"settings.png"));}finally{selector.Close();}
+            var appearance=new SettingsWindow(themes,true){Owner=hub};try{appearance.Show();Pump();Capture(appearance,Path.Combine(path,"appearance.png"));}finally{appearance.Close();}
+            hub.OpenLinks();Pump();Capture(hub.LinksEditor,Path.Combine(path,"links.png"));hub.LinksEditor.Close();
+            hub.OpenMixerLayout();Pump();Capture(hub.MixerEditor,Path.Combine(path,"mixer-layout.png"));
         }
         private static void Pump(){DispatcherFrame frame=new DispatcherFrame();Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(delegate{frame.Continue=false;}));Dispatcher.PushFrame(frame);}
         private static void Capture(Window window,string path)

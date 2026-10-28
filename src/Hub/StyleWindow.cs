@@ -72,6 +72,7 @@ namespace ReFix.Hub
             ColorEditor("Панели и элементы",delegate{return profile.Surface;},delegate(string v){profile.Surface=v;});
             ColorEditor("Основной текст",delegate{return profile.Foreground;},delegate(string v){profile.Foreground=v;});
             ColorEditor("Вторичный текст",delegate{return profile.Muted;},delegate(string v){profile.Muted=v;});
+            ColorEditor("Третичный текст",delegate{return profile.Tertiary;},delegate(string v){profile.Tertiary=v;});
             ColorEditor("Акцент",delegate{return profile.Accent;},delegate(string v){profile.Accent=v;});
             ColorEditor("Обводка",delegate{return profile.Border;},delegate(string v){profile.Border=v;});
             Heading("Прозрачность и свечение");
