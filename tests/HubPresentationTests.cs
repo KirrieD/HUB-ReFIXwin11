@@ -15,6 +15,8 @@ namespace ReFix.Tests
             report("settings choose larger free right side",!right.OnLeft&&right.Child.Left>=right.Owner.Right+10&&work.Contains(right.Child));
             var cramped=SettingsPlacement.Calculate(new Rect(0,0,1366,768),new Rect(150,10,1060,720),640,580,420,840);
             report("settings fit beside HUB on ordinary narrow screen",cramped.Child.Left>=cramped.Owner.Right+10&&cramped.Child.Width>=420&&new Rect(0,0,1366,768).Contains(cramped.Child));
+            var tinyWork=new Rect(0,0,1024,728);var tiny=SettingsPlacement.Calculate(tinyWork,new Rect(0,0,1060,720),720,760,520,840);
+            report("settings remain within small screen when both minimum widths cannot fit",tinyWork.Contains(tiny.Child)&&tinyWork.Contains(tiny.Owner));
             var negative=SettingsPlacement.Calculate(new Rect(-1920,69,1920,1080),new Rect(-1800,200,1060,700),640,580,420,840);
             report("settings placement supports negative monitor coordinates",negative.Child.Left>=negative.Owner.Right+10&&negative.Child.Right<=0&&negative.Child.Top>=69);
             var custom=new ThemeProfile{Mode="Custom",Tertiary="#123456"};custom.Normalize();

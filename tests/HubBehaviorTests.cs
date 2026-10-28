@@ -40,7 +40,13 @@ namespace ReFix.Tests
                         var official=Find<TextBox>(hub.LinksEditor,delegate(TextBox t){return t.Text==SharedSourceStore.OfficialRepository;});
                         var hubPath=Find<TextBox>(hub.LinksEditor,delegate(TextBox t){return t.Text==AppDomain.CurrentDomain.BaseDirectory;});
                         report("links expose immutable official repository and HUB path",official!=null&&official.IsReadOnly&&hubPath!=null&&hubPath.IsReadOnly&&FindButton(hub.LinksEditor,"Открыть папку HUB")!=null);
-                        var ownerBounds=Bounds(hub);var linksBounds=Bounds(hub.LinksEditor);report("actual settings window sits beside HUB",linksBounds.Right+8<=ownerBounds.Left||linksBounds.Left>=ownerBounds.Right+8);
+                        var ownerBounds=Bounds(hub);var linksBounds=Bounds(hub.LinksEditor);
+                        var work=System.Windows.Forms.Screen.FromHandle(new System.Windows.Interop.WindowInteropHelper(hub).Handle).WorkingArea;
+                        double scale=1;var source=PresentationSource.FromVisual(hub);if(source!=null&&source.CompositionTarget!=null)scale=source.CompositionTarget.TransformToDevice.M11;
+                        bool canFit=work.Width>=(hub.MinWidth+hub.LinksEditor.MinWidth)*scale+12;
+                        bool beside=linksBounds.Right+8<=ownerBounds.Left||linksBounds.Left>=ownerBounds.Right+8;
+                        bool bounded=linksBounds.Left>=work.Left&&linksBounds.Right<=work.Right&&linksBounds.Top>=work.Top&&linksBounds.Bottom<=work.Bottom;
+                        report("actual settings sit beside HUB when space permits, otherwise stay visible",canFit?beside:bounded);
                         hub.LinksEditor.Close();
                         hub.OpenBehavior();hub.BehaviorEditor.UpdateLayout();
                         CheckBox auto=FindCheck(hub.BehaviorEditor,"Скрывать HUB");
