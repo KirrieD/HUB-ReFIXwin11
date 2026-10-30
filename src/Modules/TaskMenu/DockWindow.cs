@@ -25,7 +25,7 @@ namespace ReFix.TaskMenu
         readonly Canvas board=new Canvas();readonly Border dropTarget=new Border{BorderThickness=new Thickness(2),IsHitTestVisible=false,Visibility=Visibility.Collapsed};
         bool dragging,dragHover,suppressLaunch,pendingChanged;Point press;Button pressed;string pressedPath;int previewColumns,previewRows;
         readonly TaskMenuShortcuts shortcuts;
-        bool layerTopmost=true,edgeHover;
+        bool layerTopmost=true,edgeHover,captureDeferred;
         internal IntPtr NativeHandle{get{return new WindowInteropHelper(this).Handle;}}
         internal Rect MonitorBounds{get{return monitor.Bounds;}}
         internal string PanelId{get{return panel.Id;}}
@@ -38,7 +38,7 @@ namespace ReFix.TaskMenu
             dropTarget.SetResourceReference(Border.BorderBrushProperty,"Hub.Accent");
             surface=new ThemedSurface(scroll);surface.Frame.Margin=new Thickness(0);surface.RenderTransform=slide;viewport.Children.Add(surface);edge.SetResourceReference(Border.BackgroundProperty,"Hub.Accent");viewport.Children.Add(edge);Content=viewport;
             InstallPanelGrip();
-            leave=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(300)};leave.Tick+=delegate{leave.Stop();if(!movingPanel&&!dragging&&!dragHover&&!IsMouseOver&&!AnyMenuOpen())SetExpanded(false);};
+            leave=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(300)};leave.Tick+=delegate{leave.Stop();if(CaptureVisibility.IsCaptureActive){CaptureActivityChanged(true);return;}if(!movingPanel&&!dragging&&!dragHover&&!IsMouseOver&&!AnyMenuOpen())SetExpanded(false);};
             MouseEnter+=delegate{leave.Stop();SetExpanded(true);};MouseLeave+=delegate{leave.Stop();leave.Start();};
             ContextMenu=MakeMenu(null);ContextMenu.Closed+=delegate{if(!IsMouseOver){leave.Stop();leave.Start();}};
             AllowDrop=true;DragEnter+=OnDragOver;DragOver+=OnDragOver;DragLeave+=delegate(object s,DragEventArgs e){if(!IsInside(e.GetPosition(this),ActualWidth,ActualHeight))EndHover();};Drop+=OnDrop;
@@ -66,6 +66,12 @@ namespace ReFix.TaskMenu
             Action complete=delegate{if(disposed||generation!=revision)return;animating=false;slide.SetValue(property,target);if(!expanded){Position(TaskMenuGeometry.Sliver(full,panel.Edge,4*scale));EdgeOnly(true);}};
             if(immediate||!SystemParameters.ClientAreaAnimation||SystemParameters.HighContrast||Math.Abs(target-current)<1){complete();return;}
             animating=true;var animation=new DoubleAnimation(current,target,TimeSpan.FromMilliseconds(Math.Max(40,Math.Min(200,200*Math.Abs(target-current)/Math.Max(1,Math.Abs(HiddenOffset)))))){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut},FillBehavior=FillBehavior.Stop};animation.Completed+=delegate{complete();};slide.BeginAnimation(property,animation);
+        }
+        internal void CaptureActivityChanged(bool active)
+        {
+            if(disposed)return;
+            if(active){if(expanded){captureDeferred=true;leave.Stop();}}
+            else if(captureDeferred){captureDeferred=false;if(expanded&&controls.Current.AutoHideTaskMenu&&!IsMouseOver){leave.Stop();leave.Start();}}
         }
         internal void BehaviorChanged(){edgeHover=false;EdgeOnly(!expanded&&!animating);if(!controls.Current.AutoHideTaskMenu)SetExpanded(true);else if(!IsMouseOver){leave.Stop();leave.Start();}}
         void RenderItems()

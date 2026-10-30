@@ -45,7 +45,7 @@ namespace ReFix.TaskMenu
         }
         internal void RefreshForWindow(IntPtr foreground)
         {
-            if(disposed)return;bool ownDock=false;foreach(var dock in docks)if(dock.NativeHandle==foreground)ownDock=true;
+            if(disposed)return;bool capture=CaptureVisibility.IsCaptureActive;foreach(var dock in docks)dock.CaptureActivityChanged(capture);bool ownDock=false;foreach(var dock in docks)if(dock.NativeHandle==foreground)ownDock=true;
             if(ownDock)foreground=previousForeground;else previousForeground=foreground;
             IntPtr owner=LayerNative.GetAncestor(foreground,3);if(owner!=IntPtr.Zero)foreground=owner;
             Native.RECT rect;bool visible=foreground!=IntPtr.Zero&&!DockStacking.IsDesktop(foreground)&&LayerNative.IsWindowVisible(foreground)&&!LayerNative.IsIconic(foreground)&&Native.GetWindowRect(foreground,out rect);

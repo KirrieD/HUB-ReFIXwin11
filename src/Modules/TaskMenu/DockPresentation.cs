@@ -4,7 +4,7 @@ namespace ReFix.TaskMenu
 {
     internal static class DockPresentation
     {
-        internal const uint ExcludeFromCapture=0x11;
+        internal const uint CaptureNormally=0;
         [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")]static extern IntPtr GetLong64(IntPtr window,int index);
         [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")]static extern IntPtr SetLong64(IntPtr window,int index,IntPtr value);
         [DllImport("user32.dll",EntryPoint="GetWindowLongW")]static extern int GetLong32(IntPtr window,int index);
@@ -19,7 +19,7 @@ namespace ReFix.TaskMenu
         {
             long style=(Style(window)|0x80)&~0x40000L;
             if(IntPtr.Size==8)SetLong64(window,-20,new IntPtr(style));else SetLong32(window,-20,(int)style);
-            try{return SetWindowDisplayAffinity(window,ExcludeFromCapture);}catch(EntryPointNotFoundException){return false;}
+            try{return SetWindowDisplayAffinity(window,CaptureNormally);}catch(EntryPointNotFoundException){return false;}
         }
     }
 }

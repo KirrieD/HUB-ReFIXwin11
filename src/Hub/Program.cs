@@ -119,7 +119,7 @@ namespace ReFix.Hub
                 {
                     if(session==null || !session.IsVisible)return;
                     uint current;Native.GetWindowThreadProcessId(Native.GetForegroundWindow(),out current);
-                    if(ShouldAutoHide(controls.Current.AutoHideHub,current,own))session.Hide();
+                    if(!CaptureVisibility.IsCaptureActive&&ShouldAutoHide(controls.Current.AutoHideHub,current,own))session.Hide();
                 };
                 IntPtr foreground=render?IntPtr.Zero:Native.SetWinEventHook(3,3,IntPtr.Zero,observer,0,0,0);
                 EventHandler firstShow=null;

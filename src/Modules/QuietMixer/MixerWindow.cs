@@ -74,7 +74,7 @@ namespace QuietMixer
             timer = new DispatcherTimer { Interval=TimeSpan.FromSeconds(1) };
             timer.Tick += delegate { RefreshAudio(); };
             IsVisibleChanged += delegate { if (IsVisible) { RefreshAudio(); timer.Start(); } else { timer.Stop(); ReleaseAudio(); } };
-            Deactivated += delegate { if (!closing && !positioning && this.controls.Current.AutoHideMixer && !ContextMenuOpen()) Hide(); };
+            Deactivated += delegate { if (!closing && !positioning && this.controls.Current.AutoHideMixer && !CaptureVisibility.IsCaptureActive && !ContextMenuOpen()) Hide(); };
             PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (KeyChord.Parse(this.controls.Current.Get("quiet-mixer.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)) { Hide(); e.Handled=true; } };
             SourceInitialized += delegate { ApplyCorners(); };
             Closed += delegate { closing=true;this.layouts.Changed-=LayoutChanged;if(ownsLayouts)this.layouts.Dispose();this.controls.Changed-=controlsChanged;if(ownsControls)this.controls.Dispose();timer.Stop(); ReleaseAudio(); };
@@ -180,7 +180,7 @@ namespace QuietMixer
             settings.Click+=delegate { System.Diagnostics.Process.Start("ms-settings:sound"); Hide(); }; c.Items.Add(settings);
             c.Items.Add(new Separator());
             MenuItem exit=new MenuItem { Header="Выйти из QuietMixer" }; exit.Click+=delegate { Application.Current.Shutdown(); }; c.Items.Add(exit);
-            c.Closed+=delegate { if (!IsActive && controls.Current.AutoHideMixer) Hide(); }; return c;
+            c.Closed+=delegate { if (!IsActive && controls.Current.AutoHideMixer && !CaptureVisibility.IsCaptureActive) Hide(); }; return c;
         }
         private void ReleaseAudio()
         {

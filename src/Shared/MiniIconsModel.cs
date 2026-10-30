@@ -16,8 +16,8 @@ namespace ReFix.Shared
         public int SchemaVersion{get;set;}public string Monitor{get;set;}public int IconSize{get;set;}public int Columns{get;set;}
         public bool ShowWindowsTray{get;set;}
         public List<string> OwnTransfers{get;set;}public List<string> OwnOrder{get;set;}
-        public MiniIconsConfig(){SchemaVersion=1;Monitor="";IconSize=24;Columns=5;OwnTransfers=new List<string>{"hub","quiet-mixer","task-menu","quick-note"};OwnOrder=new List<string>(OwnTransfers);}
-        public void Normalize(){SchemaVersion=1;Monitor=(Monitor??"").Substring(0,Math.Min(256,(Monitor??"").Length));IconSize=Math.Max(16,Math.Min(32,IconSize));Columns=Math.Max(1,Math.Min(8,Columns));OwnTransfers=Clean(OwnTransfers);OwnOrder=Clean(OwnOrder);}
+        public MiniIconsConfig(){SchemaVersion=2;Monitor="";IconSize=16;Columns=2;OwnTransfers=new List<string>{"hub","quiet-mixer","task-menu","quick-note"};OwnOrder=new List<string>(OwnTransfers);}
+        public void Normalize(){if(SchemaVersion<2&&IconSize==24&&Columns==5){IconSize=16;Columns=2;}SchemaVersion=2;Monitor=(Monitor??"").Substring(0,Math.Min(256,(Monitor??"").Length));IconSize=Math.Max(16,Math.Min(32,IconSize));Columns=Math.Max(1,Math.Min(8,Columns));OwnTransfers=Clean(OwnTransfers);OwnOrder=Clean(OwnOrder);}
         static List<string> Clean(IEnumerable<string> list){return (list??new string[0]).Where(MiniTrayFiles.ValidId).Distinct(StringComparer.Ordinal).Take(256).ToList();}
         public MiniIconsConfig Clone(){var p=new MiniIconsConfig{Monitor=Monitor,IconSize=IconSize,Columns=Columns,ShowWindowsTray=ShowWindowsTray,OwnTransfers=OwnTransfers==null?null:new List<string>(OwnTransfers),OwnOrder=OwnOrder==null?null:new List<string>(OwnOrder)};p.Normalize();return p;}
     }

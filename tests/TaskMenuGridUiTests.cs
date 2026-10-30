@@ -57,6 +57,8 @@ namespace ReFix.Tests
                 IntPtr desktopHost=LayerNative.GetShellWindow();Check("desktop host is excluded from fullscreen application candidates",desktopHost==IntPtr.Zero||DockStacking.IsDesktop(desktopHost));
                 cover.WindowState=WindowState.Maximized;Pump(60);environment.RefreshForWindow(handle);Check("partial mode yields to maximized native window",!DockPresentation.IsTopmost(dock.NativeHandle));
                 cover.WindowState=WindowState.Normal;cover.WindowStyle=WindowStyle.None;cover.Left=monitor.Bounds.Left/monitor.Scale;cover.Top=monitor.Bounds.Top/monitor.Scale;cover.Width=monitor.Bounds.Width/monitor.Scale;cover.Height=monitor.Bounds.Height/monitor.Scale;Pump(60);environment.RefreshForWindow(handle);Check("partial mode yields to borderless monitor sized native window",!DockPresentation.IsTopmost(dock.NativeHandle));
+                // Keep the fixture in front of real desktop windows while simulating focus on another monitor.
+                cover.Topmost=true;Native.SetWindowPos(handle,new IntPtr(-1),0,0,0,0,0x13);
                 Check("fullscreen application remains respected when focus moves to another monitor",environment.FullscreenOnMonitor(monitor.Bounds,new Rect(monitor.Bounds.Right+50,monitor.Bounds.Top,400,300),false));
                 p.TaskMenuLayer=TaskMenuLayer.AboveAll;p.ShowTaskMenuEdges=false;controls.Save(p);dock.BehaviorChanged();environment.RefreshForWindow(handle);dock.SetExpanded(false,true);
                 Check("hidden edges draw no pixels and retain raw mouse observation",dock.Opacity==0&&((Border)Field(dock,"edge")).Visibility!=Visibility.Visible&&environment.RawEnabled);
@@ -74,8 +76,10 @@ namespace ReFix.Tests
             {
                 var monitor=topology.Monitors[0];var p=new TaskMenuPanel{Monitor=monitor.Id,Edge=TaskMenuEdge.Left,IconSize=24};p.Items.Add(Path.Combine(root,"one.txt"));p.Items.Add(Path.Combine(root,"two.txt"));TaskMenuGrid.Ensure(p);TaskMenuGrid.Configure(p,4,3);TaskMenuGrid.Move(p,p.Items[1],3,2);
                 int changed=0;var dock=new DockWindow(p,monitor,new ThemeProfile{Mode="Custom"},controls,delegate{changed++;},delegate{},false,root);dock.Show();Pump(80);dock.SetExpanded(true,true);Pump(80);
+                dock.CaptureActivityChanged(true);Check("capture pauses pending auto-hide",dock.IsExpanded&&!((DispatcherTimer)Field(dock,"leave")).IsEnabled);
+                dock.CaptureActivityChanged(false);Check("capture completion resumes normal auto-hide",dock.IsMouseOver||((DispatcherTimer)Field(dock,"leave")).IsEnabled);dock.SetExpanded(true,true);
                 IntPtr dockHandle=new WindowInteropHelper(dock).Handle;Check("dock is a tool window outside taskbar and Alt-Tab",DockPresentation.IsToolWindow(dockHandle));
-                bool composed;uint affinity;if(DockPresentation.DwmIsCompositionEnabled(out composed)==0&&composed)Check("dock opts out of Windows screen capture",DockPresentation.GetWindowDisplayAffinity(dockHandle,out affinity)&&affinity==DockPresentation.ExcludeFromCapture);else Console.WriteLine("SKIP native capture affinity: desktop compositor unavailable");
+                bool composed;uint affinity;if(DockPresentation.DwmIsCompositionEnabled(out composed)==0&&composed)Check("dock stays visible in Windows screen capture",DockPresentation.GetWindowDisplayAffinity(dockHandle,out affinity)&&affinity==0);else Console.WriteLine("SKIP native capture affinity: desktop compositor unavailable");
                 var board=(Canvas)Field(dock,"board");var scroll=(ScrollViewer)Field(dock,"scroll");double cell=TaskMenuGrid.CellSize(p);
                 var grip=Find<System.Windows.Controls.Primitives.Thumb>(dock,t=>Convert.ToString(t.ToolTip)=="Переместить меню вдоль края");
                 Check("panel has a separate edge movement grip",grip!=null);
