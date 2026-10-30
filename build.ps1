@@ -1,6 +1,7 @@
 ﻿param([switch]$Test,[switch]$BuildTests,[switch]$Package)
 $ErrorActionPreference='Stop'
 $root=$PSScriptRoot
+if($Test){& (Join-Path $root 'tools\Verify-PowerShell.ps1') -Root $root}
 $out=Join-Path $root 'artifacts'
 if($env:REFIX_BUILD_OUTPUT){$out=[IO.Path]::GetFullPath($env:REFIX_BUILD_OUTPUT)}
 New-Item -ItemType Directory -Path $out -Force | Out-Null

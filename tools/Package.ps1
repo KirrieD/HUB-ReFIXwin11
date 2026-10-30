@@ -1,4 +1,4 @@
-param([string]$Artifacts = (Join-Path $PSScriptRoot '..\artifacts'))
+﻿param([string]$Artifacts = (Join-Path $PSScriptRoot '..\artifacts'))
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $Artifacts = [IO.Path]::GetFullPath($Artifacts)
