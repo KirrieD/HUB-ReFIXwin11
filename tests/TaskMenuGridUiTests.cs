@@ -46,10 +46,24 @@ namespace ReFix.Tests
             try{using(var controls=new ControlsStore(root))using(var source=new HwndSource(new HwndSourceParameters("Task grid fixture"){Width=0,Height=0,WindowStyle=unchecked((int)0x80000000)}))using(var topology=new Topology(source))
             {
                 var monitor=topology.Monitors[0];var p=new TaskMenuPanel{Monitor=monitor.Id,Edge=TaskMenuEdge.Left,IconSize=24};p.Items.Add(Path.Combine(root,"one.txt"));p.Items.Add(Path.Combine(root,"two.txt"));TaskMenuGrid.Ensure(p);TaskMenuGrid.Configure(p,4,3);TaskMenuGrid.Move(p,p.Items[1],3,2);
-                int changed=0;var dock=new DockWindow(p,monitor,new ThemeProfile{Mode="Custom"},controls,delegate{changed++;},delegate{});dock.Show();Pump(80);dock.SetExpanded(true,true);Pump(80);
+                int changed=0;var dock=new DockWindow(p,monitor,new ThemeProfile{Mode="Custom"},controls,delegate{changed++;},delegate{},false,root);dock.Show();Pump(80);dock.SetExpanded(true,true);Pump(80);
                 IntPtr dockHandle=new WindowInteropHelper(dock).Handle;Check("dock is a tool window outside taskbar and Alt-Tab",DockPresentation.IsToolWindow(dockHandle));
                 bool composed;uint affinity;if(DockPresentation.DwmIsCompositionEnabled(out composed)==0&&composed)Check("dock opts out of Windows screen capture",DockPresentation.GetWindowDisplayAffinity(dockHandle,out affinity)&&affinity==DockPresentation.ExcludeFromCapture);else Console.WriteLine("SKIP native capture affinity: desktop compositor unavailable");
                 var board=(Canvas)Field(dock,"board");var scroll=(ScrollViewer)Field(dock,"scroll");double cell=TaskMenuGrid.CellSize(p);
+                var grip=Find<System.Windows.Controls.Primitives.Thumb>(dock,t=>Convert.ToString(t.ToolTip)=="Переместить меню вдоль края");
+                Check("panel has a separate edge movement grip",grip!=null);
+                if(grip!=null){
+                    double before=p.Position;Native.RECT initial;Native.GetWindowRect(dockHandle,out initial);
+                    grip.RaiseEvent(new System.Windows.Controls.Primitives.DragStartedEventArgs(0,0){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragStartedEvent});
+                    Point start=(Point)Field(dock,"panelDragPointer");dock.GetType().GetMethod("MovePanelTo",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(dock,new object[]{new Point(start.X+400,start.Y+120)});
+                    Native.RECT moved;Native.GetWindowRect(dockHandle,out moved);Check("side panel drag changes only vertical native position",moved.Left==initial.Left&&moved.Top>initial.Top&&p.Position>before);
+                    dock.SetExpanded(false,true);Check("panel remains expanded throughout movement",dock.IsExpanded&&changed==0);
+                    grip.RaiseEvent(new System.Windows.Controls.Primitives.DragCompletedEventArgs(0,120,true){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragCompletedEvent});
+                    Check("cancelled panel drag restores position without saving",p.Position==before&&changed==0);
+                    grip.RaiseEvent(new System.Windows.Controls.Primitives.DragStartedEventArgs(0,0){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragStartedEvent});start=(Point)Field(dock,"panelDragPointer");dock.GetType().GetMethod("MovePanelTo",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(dock,new object[]{new Point(start.X,start.Y+80)});
+                    grip.RaiseEvent(new System.Windows.Controls.Primitives.DragCompletedEventArgs(0,80,false){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragCompletedEvent});
+                    Check("completed panel drag saves once",changed==1&&p.Position>before);changed=0;
+                }
                 Check("logical board retains empty columns and rows",board.Width==4*cell&&board.Height==3*cell);
                 Check("sparse board creates occupied controls and one highlight",board.Children.Count==3&&board.Background is DrawingBrush);
                 Check("saved tile sits at exact cell coordinate",Canvas.GetLeft(board.Children[1])==3*cell+2&&Canvas.GetTop(board.Children[1])==2*cell+2);
@@ -75,7 +89,18 @@ namespace ReFix.Tests
                 TaskMenuGrid.Configure(p,12,512);dock.GetType().GetMethod("RenderItems",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(dock,null);dock.SetExpanded(true,true);Pump(50);
                 Check("large board does not produce empty cell controls",board.Children.Count==3&&board.Height==512*cell&&scroll.ExtentHeight>scroll.ViewportHeight);
                 TaskMenuGrid.Configure(p,3,1);var move=dock.GetType().GetMethod("Move",BindingFlags.Instance|BindingFlags.NonPublic);move.Invoke(dock,new object[]{p.Items[0],1});move.Invoke(dock,new object[]{p.Items[0],1});Check("repeated context move advances through spatial cells",p.Cells[p.Items[0]].Column==2);
+                string sourceShortcut=Path.Combine(root,"Dropped.url");File.WriteAllText(sourceShortcut,"[InternetShortcut]\r\nURL=https://example.com/\r\n");var shortcutData=new DataObject(DataFormats.FileDrop,new[]{sourceShortcut});
+                Drag(dock,board,shortcutData,DragDrop.DragOverEvent,0,0);var imported=Drag(dock,board,shortcutData,DragDrop.DropEvent,0,0);string menuShortcut=p.Items[p.Items.Count-1];File.Delete(sourceShortcut);
+                Check("dropping shortcut stores an independent copy in isolated data root",imported.Effects==DragDropEffects.Copy&&menuShortcut.StartsWith(Path.Combine(root,"task-menu-shortcuts"),StringComparison.OrdinalIgnoreCase)&&File.Exists(menuShortcut));
                 dock.SetExpanded(false,true);Check("collapsing remains available after drag",!dock.IsExpanded);dock.Shutdown();
+                var bottomPanel=new TaskMenuPanel{Monitor=monitor.Id,Edge=TaskMenuEdge.Bottom};int bottomSaved=0;
+                var bottomDock=new DockWindow(bottomPanel,monitor,new ThemeProfile{Mode="Custom"},controls,delegate{bottomSaved++;},delegate{},true,root);bottomDock.Show();Pump(50);bottomDock.SetExpanded(true,true);
+                var bottomGrip=Find<System.Windows.Controls.Primitives.Thumb>(bottomDock,t=>true);Native.RECT bottomStart;Native.GetWindowRect(new WindowInteropHelper(bottomDock).Handle,out bottomStart);
+                bottomGrip.RaiseEvent(new System.Windows.Controls.Primitives.DragStartedEventArgs(0,0){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragStartedEvent});var bottomPointer=(Point)Field(bottomDock,"panelDragPointer");bottomDock.GetType().GetMethod("MovePanelTo",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(bottomDock,new object[]{new Point(bottomPointer.X+100,bottomPointer.Y-300)});
+                Native.RECT bottomEnd;Native.GetWindowRect(new WindowInteropHelper(bottomDock).Handle,out bottomEnd);bottomGrip.RaiseEvent(new System.Windows.Controls.Primitives.DragCompletedEventArgs(100,-300,false){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragCompletedEvent});
+                Check("bottom panel moves horizontally while remaining at bottom edge",bottomEnd.Left>bottomStart.Left&&bottomEnd.Bottom==bottomStart.Bottom&&bottomSaved==1);
+                double savedPosition=bottomPanel.Position;bottomDock.Shutdown();var reopened=new DockWindow(bottomPanel,monitor,new ThemeProfile{Mode="Custom"},controls,delegate{},delegate{},false,root);reopened.Show();Pump(50);reopened.SetExpanded(false,true);Native.RECT sliver;Native.GetWindowRect(new WindowInteropHelper(reopened).Handle,out sliver);
+                Check("reopened collapsed panel retains moved horizontal position",Math.Abs(sliver.Left-bottomEnd.Left)<=1&&bottomPanel.Position==savedPosition);reopened.Shutdown();
                 foreach(TaskMenuEdge edge in Enum.GetValues(typeof(TaskMenuEdge)))if(!monitor.Forbidden.Contains(edge)){p.Edge=edge;break;}
                 var config=new TaskMenuConfig();config.Panels.Add(p);int saved=0;
                 var settings=new SettingsWindow(config,topology,new ThemeProfile{Mode="Custom"},delegate{saved++;});settings.Show();Pump(80);

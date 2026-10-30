@@ -12,9 +12,10 @@ namespace ReFix.Shared
     {
         public string Id {get;set;} public string Monitor {get;set;} public TaskMenuEdge Edge {get;set;}
         public int Columns {get;set;} public int Rows {get;set;} public bool GridConfigured {get;set;}
+        public double Position {get;set;}
         public Dictionary<string,TaskMenuCell> Cells {get;set;}
         public int IconSize {get;set;} public List<string> Items {get;set;}
-        public TaskMenuPanel(){Id=Guid.NewGuid().ToString("N");Monitor="";Columns=4;Rows=1;IconSize=24;Items=new List<string>();Cells=new Dictionary<string,TaskMenuCell>(StringComparer.OrdinalIgnoreCase);}
+        public TaskMenuPanel(){Id=Guid.NewGuid().ToString("N");Monitor="";Position=.5;Columns=4;Rows=1;IconSize=24;Items=new List<string>();Cells=new Dictionary<string,TaskMenuCell>(StringComparer.OrdinalIgnoreCase);}
         public override string ToString(){return Monitor+" · "+Edge+" · "+Items.Count+" элементов";}
     }
     public sealed class TaskMenuConfig
@@ -29,6 +30,7 @@ namespace ReFix.Shared
                 int count;counts.TryGetValue(p.Monitor,out count);if(count>=3||!positions.Add(p.Monitor+"|"+p.Edge))continue;counts[p.Monitor]=count+1;
                 if(String.IsNullOrWhiteSpace(p.Id)||!ids.Add(p.Id)){p.Id=Guid.NewGuid().ToString("N");ids.Add(p.Id);}
                 p.Columns=Math.Max(1,Math.Min(12,p.Columns));p.IconSize=Math.Max(14,Math.Min(28,p.IconSize));
+                p.Position=TaskMenuGeometry.NormalizePosition(p.Position);
                 var items=new List<string>();var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach(string item in p.Items??new List<string>()){string path=NormalizePath(item);if(path!=null&&seen.Add(path)&&items.Count<512)items.Add(path);}p.Items=items;TaskMenuGrid.Ensure(p);clean.Add(p);
             }Panels=clean;
@@ -97,6 +99,13 @@ namespace ReFix.Shared
     }
     public static class TaskMenuGeometry
     {
+        public static double NormalizePosition(double value){return double.IsNaN(value)||double.IsInfinity(value)?.5:Math.Max(0,Math.Min(1,value));}
+        public static double PositionAt(Rect monitor,Rect work,TaskMenuEdge edge,Rect full,double coordinate)
+        {
+            Rect area=Rect.Intersect(monitor,work);if(area.IsEmpty)area=monitor;
+            bool vertical=edge==TaskMenuEdge.Left||edge==TaskMenuEdge.Right;double length=vertical?area.Height-full.Height:area.Width-full.Width;
+            return length<=0?.5:NormalizePosition((coordinate-(vertical?area.Top:area.Left))/length);
+        }
         // Coordinates are physical desktop pixels, including negative monitor origins.
         public static TaskMenuEdge? TaskbarEdge(Rect monitor,Rect taskbar)
         {
@@ -120,7 +129,8 @@ namespace ReFix.Shared
             double desiredWidth=TaskMenuGrid.Width(panel)*scale,desiredHeight=TaskMenuGrid.Height(panel)*scale;
             bool vertical=desiredHeight>area.Height,horizontal=desiredWidth>area.Width;
             double width=Math.Min(area.Width,desiredWidth+(vertical?18*scale:0)),height=Math.Min(area.Height,desiredHeight+(horizontal?18*scale:0));
-            double x=area.Left+(area.Width-width)/2,y=area.Top+(area.Height-height)/2;
+            double position=NormalizePosition(panel.Position);
+            double x=area.Left+(area.Width-width)*position,y=area.Top+(area.Height-height)*position;
             if(panel.Edge==TaskMenuEdge.Left)x=monitor.Left;if(panel.Edge==TaskMenuEdge.Right)x=monitor.Right-width;
             if(panel.Edge==TaskMenuEdge.Top)y=monitor.Top;if(panel.Edge==TaskMenuEdge.Bottom)y=monitor.Bottom-height;
             return new Rect(x,y,width,height);

@@ -24,6 +24,7 @@ namespace ReFix.Tests
             Group("scoped custom themes",delegate{ScopedThemeTests.Run(Report);});
             Group("task menu configuration and geometry",delegate{TaskMenuTests.Run(Report);});
             Group("task menu block grid",delegate{TaskMenuGridTests.Run(Report);});
+            Group("task menu shortcut ownership and position",delegate{TaskMenuOwnershipTests.Run(Report);});
             Group("behavior settings",delegate{BehaviorSettingsTests.Run(Report);});
             Group("opaque settings surfaces",delegate{SettingsSurfaceTests.Run(Report);});
             Group("HUB presentation and placement",delegate{HubPresentationTests.Run(Report);});

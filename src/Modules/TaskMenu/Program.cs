@@ -28,6 +28,7 @@ namespace ReFix.TaskMenu
         internal Controller(Application app,ThemeStore themes,ControlsStore controls,Topology topology)
         {
             this.app=app;this.themes=themes;this.controls=controls;this.topology=topology;store=new TaskMenuStore(Paths.Root);config=store.Load();
+            try{if(new TaskMenuShortcuts(Paths.Root).Migrate(config))store.Save(config);}catch(Exception ex){if(!(ex is IOException||ex is UnauthorizedAccessException))throw;MessageBox.Show(ex.Message,"Не удалось сохранить копии ярлыков");}
             var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("Настроить панели…",null,delegate{app.Dispatcher.BeginInvoke(new Action(ShowSettings));});menu.Items.Add("Раскрыть / свернуть",null,delegate{app.Dispatcher.BeginInvoke(new Action(Toggle));});menu.Items.Add("Выключить меню задач",null,delegate{app.Dispatcher.BeginInvoke(new Action(app.Shutdown));});
             tray=new System.Windows.Forms.NotifyIcon{Text="ReFIX · Меню задач v"+ProductInfo.Version,Icon=System.Drawing.SystemIcons.Application,ContextMenuStrip=menu,Visible=true};tray.DoubleClick+=delegate{app.Dispatcher.BeginInvoke(new Action(ShowSettings));};
             topology.Changed+=OnTopology;themes.Changed+=OnTheme;controls.Changed+=OnControls;Rebuild();

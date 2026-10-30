@@ -16,7 +16,7 @@ using ReFix.Modules;
 
 namespace ReFix.TaskMenu
 {
-    internal sealed class DockWindow : Window
+    internal sealed partial class DockWindow : Window
     {
         readonly TaskMenuPanel panel;readonly MonitorInfo monitor;readonly Action changed,settings;readonly ControlsStore controls;readonly Grid viewport=new Grid{ClipToBounds=true};readonly TranslateTransform slide=new TranslateTransform();readonly DispatcherTimer leave;
         readonly Border edge=new Border();readonly ThemedSurface surface;readonly ScrollViewer scroll;readonly bool initiallyExpanded;Rect full;bool expanded,animating,disposed;int revision;double scale=1;ThemeProfile theme;
@@ -24,36 +24,38 @@ namespace ReFix.TaskMenu
         [Serializable] internal sealed class DragPayload { internal readonly string PanelId,Path;internal DragPayload(string panelId,string path){PanelId=panelId;Path=path;} }
         readonly Canvas board=new Canvas();readonly Border dropTarget=new Border{BorderThickness=new Thickness(2),IsHitTestVisible=false,Visibility=Visibility.Collapsed};
         bool dragging,dragHover,suppressLaunch,pendingChanged;Point press;Button pressed;string pressedPath;int previewColumns,previewRows;
+        readonly TaskMenuShortcuts shortcuts;
         internal string PanelId{get{return panel.Id;}}
-        internal DockWindow(TaskMenuPanel panel,MonitorInfo monitor,ThemeProfile theme,ControlsStore controls,Action changed,Action settings,bool initiallyExpanded=false)
+        internal DockWindow(TaskMenuPanel panel,MonitorInfo monitor,ThemeProfile theme,ControlsStore controls,Action changed,Action settings,bool initiallyExpanded=false,string dataRoot=null)
         {
-            this.panel=panel;this.monitor=monitor;this.controls=controls;this.changed=changed;this.settings=settings;this.theme=theme;this.initiallyExpanded=initiallyExpanded;
+            this.panel=panel;this.monitor=monitor;this.controls=controls;this.changed=changed;this.settings=settings;this.theme=theme;this.initiallyExpanded=initiallyExpanded;shortcuts=new TaskMenuShortcuts(dataRoot??Paths.Root);
             ThemeControls.Install(this);
             Title="Меню задач · "+panel.Edge;WindowStyle=WindowStyle.None;AllowsTransparency=true;ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;ShowActivated=false;Topmost=true;Background=Brushes.Transparent;Opacity=0;
             TaskMenuGrid.Ensure(panel);viewport.Background=Brushes.Transparent;scroll=new ScrollViewer{VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,Margin=new Thickness(12),BorderThickness=new Thickness(0),Padding=new Thickness(0),Content=board,CanContentScroll=false};
             dropTarget.SetResourceReference(Border.BorderBrushProperty,"Hub.Accent");
             surface=new ThemedSurface(scroll);surface.Frame.Margin=new Thickness(0);surface.RenderTransform=slide;viewport.Children.Add(surface);edge.SetResourceReference(Border.BackgroundProperty,"Hub.Accent");viewport.Children.Add(edge);Content=viewport;
-            leave=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(300)};leave.Tick+=delegate{leave.Stop();if(!dragging&&!dragHover&&!IsMouseOver&&!AnyMenuOpen())SetExpanded(false);};
+            InstallPanelGrip();
+            leave=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(300)};leave.Tick+=delegate{leave.Stop();if(!movingPanel&&!dragging&&!dragHover&&!IsMouseOver&&!AnyMenuOpen())SetExpanded(false);};
             MouseEnter+=delegate{leave.Stop();SetExpanded(true);};MouseLeave+=delegate{leave.Stop();leave.Start();};
             ContextMenu=MakeMenu(null);ContextMenu.Closed+=delegate{if(!IsMouseOver){leave.Stop();leave.Start();}};
             AllowDrop=true;DragEnter+=OnDragOver;DragOver+=OnDragOver;DragLeave+=delegate(object s,DragEventArgs e){if(!IsInside(e.GetPosition(this),ActualWidth,ActualHeight))EndHover();};Drop+=OnDrop;
-            PreviewKeyDown+=delegate(object s,KeyEventArgs e){if(KeyChord.Parse(controls.Current.Get("task-menu.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)){SetExpanded(false);e.Handled=true;}};
+            PreviewKeyDown+=delegate(object s,KeyEventArgs e){if(movingPanel&&e.Key==Key.Escape){panelGrip.CancelDrag();e.Handled=true;return;}if(KeyChord.Parse(controls.Current.Get("task-menu.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)){SetExpanded(false);e.Handled=true;}};
             SourceInitialized+=delegate{var handle=new WindowInteropHelper(this).Handle;DockPresentation.Apply(handle);var source=HwndSource.FromHwnd(handle);source.AddHook(delegate(IntPtr h,int msg,IntPtr w,IntPtr l,ref bool handled){if(msg==0x02E0)Dispatcher.BeginInvoke(new Action(delegate{if(!disposed){UpdateGeometry();SetExpanded(expanded,true);}}));return IntPtr.Zero;});};
             Loaded+=delegate{DockPresentation.Apply(new WindowInteropHelper(this).Handle);UpdateGeometry();SetExpanded(initiallyExpanded||!controls.Current.AutoHideTaskMenu,true);Opacity=1;if(initiallyExpanded&&controls.Current.AutoHideTaskMenu)leave.Start();};ApplyTheme(theme);RenderItems();
         }
         bool AnyMenuOpen(){if(ContextMenu!=null&&ContextMenu.IsOpen)return true;foreach(var item in board.Children){var b=item as Button;if(b!=null&&b.ContextMenu!=null&&b.ContextMenu.IsOpen)return true;}return false;}
         internal void ApplyTheme(ThemeProfile value){theme=value;surface.Apply(this,value);UpdateClip();}
         void UpdateClip(){double w=surface.Width,h=surface.Height;if(Double.IsNaN(w)||Double.IsNaN(h)||w<=0||h<=0)return;double cut=Math.Min(12,Math.Min(w,h)/4);var shape=new StreamGeometry();using(var c=shape.Open()){c.BeginFigure(new Point(cut,0),true,true);c.PolyLineTo(new[]{new Point(w-cut,0),new Point(w,cut),new Point(w,h-cut),new Point(w-cut,h),new Point(cut,h),new Point(0,h-cut),new Point(0,cut)},true,false);}shape.Freeze();surface.Clip=shape;}
-        void UpdateGeometry(){var source=PresentationSource.FromVisual(this);scale=source==null?monitor.Scale:source.CompositionTarget.TransformToDevice.M11;var extent=new TaskMenuPanel{Edge=panel.Edge,Columns=Math.Max(panel.Columns,previewColumns),Rows=Math.Max(panel.Rows,previewRows),IconSize=panel.IconSize,GridConfigured=true};full=TaskMenuGeometry.Expanded(monitor.Bounds,monitor.Work,extent,scale);surface.Width=full.Width/scale;surface.Height=full.Height/scale;board.Width=extent.Columns*TaskMenuGrid.CellSize(panel);board.Height=extent.Rows*TaskMenuGrid.CellSize(panel);UpdateClip();}
+        void UpdateGeometry(){var source=PresentationSource.FromVisual(this);scale=source==null?monitor.Scale:source.CompositionTarget.TransformToDevice.M11;var extent=new TaskMenuPanel{Edge=panel.Edge,Position=panel.Position,Columns=Math.Max(panel.Columns,previewColumns),Rows=Math.Max(panel.Rows,previewRows),IconSize=panel.IconSize,GridConfigured=true};full=TaskMenuGeometry.Expanded(monitor.Bounds,monitor.Work,extent,scale);surface.Width=full.Width/scale;surface.Height=full.Height/scale;board.Width=extent.Columns*TaskMenuGrid.CellSize(panel);board.Height=extent.Rows*TaskMenuGrid.CellSize(panel);UpdateClip();}
         double HiddenOffset{get{return (panel.Edge==TaskMenuEdge.Left||panel.Edge==TaskMenuEdge.Top)?-(panel.Edge==TaskMenuEdge.Left?full.Width:full.Height)/scale+4:(panel.Edge==TaskMenuEdge.Right?full.Width:full.Height)/scale-4;}}
         bool Horizontal{get{return panel.Edge==TaskMenuEdge.Left||panel.Edge==TaskMenuEdge.Right;}}
         void Position(Rect rect){Width=rect.Width/scale;Height=rect.Height/scale;Native.SetWindowPos(new WindowInteropHelper(this).Handle,new IntPtr(-1),(int)Math.Round(rect.X),(int)Math.Round(rect.Y),Math.Max(1,(int)Math.Round(rect.Width)),Math.Max(1,(int)Math.Round(rect.Height)),0x10|0x40);}
-        void EdgeOnly(bool only){edge.Visibility=only?Visibility.Visible:Visibility.Hidden;surface.Visibility=only?Visibility.Hidden:Visibility.Visible;}
+        void EdgeOnly(bool only){edge.Visibility=only?Visibility.Visible:Visibility.Hidden;surface.Visibility=only?Visibility.Hidden:Visibility.Visible;panelGrip.Visibility=only?Visibility.Hidden:Visibility.Visible;}
         internal bool IsExpanded{get{return expanded;}}
         internal void SetExpanded(bool show){SetExpanded(show,false);}
         internal void SetExpanded(bool show,bool immediate)
         {
-            if(disposed)return;if(dragging||dragHover)show=true;if(!controls.Current.AutoHideTaskMenu)show=true;if(!immediate&&show==expanded&&!animating)return;
+            if(disposed)return;if(movingPanel||dragging||dragHover)show=true;if(!controls.Current.AutoHideTaskMenu)show=true;if(!immediate&&show==expanded&&!animating)return;
             int generation=++revision;double current=Horizontal?slide.X:slide.Y;if(!expanded&&!animating)current=HiddenOffset;slide.BeginAnimation(TranslateTransform.XProperty,null);slide.BeginAnimation(TranslateTransform.YProperty,null);expanded=show;
             Position(full);EdgeOnly(false);double target=show?0:HiddenOffset;var property=Horizontal?TranslateTransform.XProperty:TranslateTransform.YProperty;slide.SetValue(property,current);
             Action complete=delegate{if(disposed||generation!=revision)return;animating=false;slide.SetValue(property,target);if(!expanded){Position(TaskMenuGeometry.Sliver(full,panel.Edge,4*scale));EdgeOnly(true);}};
@@ -147,9 +149,9 @@ namespace ReFix.TaskMenu
         MenuItem Item(string title,Action action){var item=new MenuItem{Header=title};item.Click+=delegate{action();};return item;}
         ContextMenu MakeMenu(string path){var menu=new ContextMenu();menu.Items.Add(Item("Добавить файлы…",AddFiles));menu.Items.Add(Item("Добавить папку…",AddFolder));menu.Items.Add(Item("Настроить панели…",settings));if(path!=null){menu.Items.Add(new Separator());menu.Items.Add(Item("Переместить раньше",delegate{Move(path,-1);}));menu.Items.Add(Item("Переместить позже",delegate{Move(path,1);}));menu.Items.Add(Item("Убрать из меню",delegate{panel.Items.Remove(path);changed();}));}return menu;}
         void Move(string path,int delta){TaskMenuGrid.Ensure(panel);TaskMenuCell cell;if(!panel.Cells.TryGetValue(path,out cell))return;int to=cell.Row*panel.Columns+cell.Column+delta;if(to<0||to>=panel.Columns*panel.Rows)return;TryMoveTile(path,to%panel.Columns,to/panel.Columns);}
-        void AddFiles(){var dialog=new OpenFileDialog{Multiselect=true,Title="Добавить файлы в меню задач",CheckFileExists=true};if(dialog.ShowDialog(this)==true)Add(dialog.FileNames);}
+        void AddFiles(){var dialog=new OpenFileDialog{Multiselect=true,DereferenceLinks=false,Title="Добавить файлы в меню задач",CheckFileExists=true};if(dialog.ShowDialog(this)==true)Add(dialog.FileNames);}
         void AddFolder(){using(var dialog=new System.Windows.Forms.FolderBrowserDialog{Description="Выберите папку для меню задач"}){if(dialog.ShowDialog()==System.Windows.Forms.DialogResult.OK)Add(new[]{dialog.SelectedPath});}}
-        void Add(string[] files){bool added=false;foreach(string file in files){string path=TaskMenuConfig.NormalizePath(file);if(path!=null&&(File.Exists(path)||Directory.Exists(path))&&!panel.Items.Exists(delegate(string p){return String.Equals(p,path,StringComparison.OrdinalIgnoreCase);})&&panel.Items.Count<512){panel.Items.Add(path);added=true;}}if(added){TaskMenuGrid.Ensure(panel);if(dragging)pendingChanged=true;else changed();}}
+        void Add(string[] files){bool added=false;string error=null;foreach(string file in files){string path=TaskMenuConfig.NormalizePath(file);if(path==null||(!File.Exists(path)&&!Directory.Exists(path))||panel.Items.Count>=512)continue;try{path=shortcuts.Import(path);if(!panel.Items.Exists(delegate(string p){return String.Equals(p,path,StringComparison.OrdinalIgnoreCase);})) {panel.Items.Add(path);added=true;}}catch(Exception ex){if(!(ex is IOException||ex is UnauthorizedAccessException||ex is ArgumentException))throw;error=ex.Message;}}if(added){TaskMenuGrid.Ensure(panel);if(dragging)pendingChanged=true;else changed();}if(error!=null)MessageBox.Show(this,error,"Не удалось добавить ярлык");}
         [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]struct SHFILEINFO{public IntPtr icon;public int index;public uint attributes;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=260)]public string name;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=80)]public string type;}
         [DllImport("shell32.dll",CharSet=CharSet.Unicode)]static extern IntPtr SHGetFileInfo(string path,uint attributes,out SHFILEINFO info,uint size,uint flags);
         [DllImport("user32.dll")]static extern bool DestroyIcon(IntPtr icon);
