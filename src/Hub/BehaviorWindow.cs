@@ -44,6 +44,9 @@ namespace ReFix.Hub
             Choice(menu,"Показать грани","menu-edges",p=>p.ShowTaskMenuEdges,(p)=>p.ShowTaskMenuEdges=true);
             Choice(menu,"Убрать грани","menu-edges",p=>!p.ShowTaskMenuEdges,(p)=>p.ShowTaskMenuEdges=false);
             menu.Children.Add(Ui.Text("Скрытая грань остаётся зоной наведения поверх окон. Открытое меню соблюдает выбранный режим наложения.",11,"Hub.Muted"));
+            var mini=Section(content,"mini-icons","Поведение Мини значков",false);
+            Add(mini,"Скрывать мини-меню",p=>p.AutoHideMiniIcons,(p,v)=>p.AutoHideMiniIcons=v);
+            Add(mini,"Автозапуск Мини значки",p=>p.StartMiniIconsWithHub,(p,v)=>p.StartMiniIconsWithHub=v);
             themes.Changed+=Changed;controls.Changed+=Changed;Activated+=delegate{Refresh();};
             Closed+=delegate{closed=true;themes.Changed-=Changed;controls.Changed-=Changed;};
             SizeChanged+=delegate{Ui.Apply(this,themes.Current,frame,image,true);};Refresh();

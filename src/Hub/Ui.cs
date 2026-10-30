@@ -62,10 +62,11 @@ namespace ReFix.Hub
         private readonly Border picture;
         private readonly ThemeStore previewThemes;
         private readonly Window themeCanvas=new Window();
+        private readonly System.Collections.Generic.List<Image> miniIcons=new System.Collections.Generic.List<Image>();
         private bool disposed;
         internal ModulePreview(ModuleManifest manifest,string themeRoot=null)
         {
-            previewThemes=new ThemeStore(themeRoot??Paths.Root,manifest.Id=="quiet-mixer"||manifest.Id=="task-menu"?manifest.Id:null);
+            previewThemes=new ThemeStore(themeRoot??Paths.Root,manifest.Id=="quiet-mixer"||manifest.Id=="task-menu"||manifest.Id=="mini-icons"?manifest.Id:null);
             Width=216; Height=128; CornerRadius=new CornerRadius(8); BorderThickness=new Thickness(1);
             SetResourceReference(BackgroundProperty,"Hub.Background"); SetResourceReference(BorderBrushProperty,"Hub.Border");
             Grid grid=new Grid(); Child=grid;
@@ -83,6 +84,16 @@ namespace ReFix.Hub
             {
                 TextBlock note=Ui.Text("Идея для следующего\nрасширения…",12,"Hub.Foreground"); note.Margin=new Thickness(0,14,0,0); content.Children.Add(note);
                 Border line=new Border { Height=2,Width=24,HorizontalAlignment=HorizontalAlignment.Left,Margin=new Thickness(0,12,0,0) }; line.SetResourceReference(BackgroundProperty,"Hub.Accent"); content.Children.Add(line);
+            }
+            else if(manifest.Preview=="mini-icons")
+            {
+                WrapPanel icons=new WrapPanel { Margin=new Thickness(3,17,3,0),HorizontalAlignment=HorizontalAlignment.Center };
+                foreach(string id in new[]{"hub","quiet-mixer","task-menu","mini-icons"})
+                {
+                    var icon=new Image{Width=26,Height=26,Tag=id,Margin=new Thickness(6)};
+                    miniIcons.Add(icon);icons.Children.Add(icon);
+                }
+                content.Children.Add(icons);
             }
             else if(manifest.Preview=="menu")
             {
@@ -107,6 +118,15 @@ namespace ReFix.Hub
         {
             if(disposed)return;
             profile=previewThemes.Current;
+            foreach(var icon in miniIcons)
+            {
+                using(var bitmap=ReFixIcons.CreateBitmap((string)icon.Tag,52,profile))
+                using(var stream=new System.IO.MemoryStream())
+                {
+                    bitmap.Save(stream,System.Drawing.Imaging.ImageFormat.Png);stream.Position=0;
+                    var source=new System.Windows.Media.Imaging.BitmapImage();source.BeginInit();source.CacheOption=System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;source.StreamSource=stream;source.EndInit();source.Freeze();icon.Source=source;
+                }
+            }
             themeCanvas.Width=Width;themeCanvas.Height=Height;ThemeApplier.Apply(themeCanvas,profile);
             foreach(System.Collections.DictionaryEntry entry in themeCanvas.Resources)Resources[entry.Key]=entry.Value;
             ThemeProfile p=ThemeProfile.Resolve(profile);CornerRadius=new CornerRadius(p.CornerRadius*.5);

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
 using ReFix.Hub;
 namespace ReFix.Tests
@@ -56,6 +57,19 @@ namespace ReFix.Tests
                     }
                     finally {manager.UninstallAsync(view).GetAwaiter().GetResult();}
                     report("real menu uninstalls gracefully and preserves configuration",view.State=="NO"&&File.Exists(Path.Combine(lifecycle,"task-menu.json")));
+                    controls.Assign("mini-icons.toggle","Ctrl+Alt+Shift+F20");
+                    var mini=manager.Modules.Single(v=>v.Manifest.Id=="mini-icons");
+                    manager.InstallLocalAsync(mini).GetAwaiter().GetResult();
+                    report("real mini icons installs offline from exact embedded Core resource",mini.State=="OFF"&&File.Exists(Path.Combine(mini.InstallDirectory,"MiniIcons.exe")));
+                    try
+                    {
+                        manager.StartAsync(mini).GetAwaiter().GetResult();
+                        var runtime=controls.GetRuntime("mini-icons.toggle");
+                        report("real mini icons reports active runtime and saved key",mini.State=="ON"&&runtime!=null&&runtime.Actual=="Ctrl+Alt+Shift+F20"&&String.IsNullOrEmpty(runtime.Error));
+                        manager.ShowAsync(mini).GetAwaiter().GetResult();
+                    }
+                    finally {manager.UninstallAsync(mini).GetAwaiter().GetResult();}
+                    report("real mini icons uninstalls and removes live tray host",mini.State=="NO"&&ReFix.Shared.MiniTrayFiles.ReadHost(lifecycle)==null);
                 }
             }
             finally {if(Directory.Exists(lifecycle))Directory.Delete(lifecycle,true);}

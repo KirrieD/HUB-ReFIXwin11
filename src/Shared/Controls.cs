@@ -23,10 +23,12 @@ namespace ReFix.Shared
         public static readonly ReadOnlyCollection<ControlAction> All=Array.AsReadOnly(new[] {
             new ControlAction("hub.toggle","Показать / скрыть HUB","global","Ctrl+Alt+H","Открыть или скрыть главное окно"),
             new ControlAction("quiet-mixer.toggle","Показать / скрыть микшер","global","Ctrl+Alt+V","Открыть или скрыть микшер"),
+            new ControlAction("mini-icons.toggle","Показать / скрыть мини значки","global","Ctrl+Alt+I","Открыть или скрыть мини-меню"),
             new ControlAction("task-menu.toggle","Показать / скрыть меню","global","Ctrl+Alt+M","Открыть или скрыть меню задач"),
             new ControlAction("quick-note.toggle","Показать / скрыть заметки","global","","Открыть или скрыть заметки"),
             new ControlAction("hub.hide","Скрыть HUB","hub","Esc","Скрыть главное окно"),
             new ControlAction("quiet-mixer.hide","Скрыть микшер","quiet-mixer","Esc","Скрыть микшер"),
+            new ControlAction("mini-icons.hide","Скрыть мини значки","mini-icons","Esc","Скрыть мини-меню"),
             new ControlAction("task-menu.hide","Скрыть меню","task-menu","Esc","Скрыть меню задач"),
             new ControlAction("quick-note.hide","Скрыть заметки","quick-note","Esc","Скрыть заметки"),
             new ControlAction("quick-note.save","Сохранить заметку","quick-note","Ctrl+S","Сохранить текущую заметку") });
@@ -34,11 +36,12 @@ namespace ReFix.Shared
     }
     public sealed class ControlsProfile
     {
+        public bool AutoHideMiniIcons {get;set;} public bool StartMiniIconsWithHub {get;set;}
         public TaskMenuLayer TaskMenuLayer { get; set; } public bool ShowTaskMenuEdges { get; set; }
         public Dictionary<string,string> Bindings { get; set; } public bool StartMixerWithHub { get; set; } public bool AutoHideHub { get; set; } public bool AutoHideMixer { get; set; } public bool AutoHideTaskMenu { get; set; } public bool StartTaskMenuWithHub { get; set; }
-        public ControlsProfile() { ShowTaskMenuEdges=true;AutoHideHub=true;AutoHideMixer=true;AutoHideTaskMenu=true;Bindings=new Dictionary<string,string>();foreach(var a in ControlActions.All)Bindings[a.Id]=a.DefaultGesture; }
+        public ControlsProfile() { AutoHideMiniIcons=true; ShowTaskMenuEdges=true;AutoHideHub=true;AutoHideMixer=true;AutoHideTaskMenu=true;Bindings=new Dictionary<string,string>();foreach(var a in ControlActions.All)Bindings[a.Id]=a.DefaultGesture; }
         public string Get(string id) { var a=ControlActions.Find(id);string v;return Bindings!=null&&Bindings.TryGetValue(id,out v)?v??"":a.DefaultGesture; }
-        public ControlsProfile Clone() { var p=new ControlsProfile();p.TaskMenuLayer=TaskMenuLayerPolicy.Normalize(TaskMenuLayer);p.ShowTaskMenuEdges=ShowTaskMenuEdges;p.StartMixerWithHub=StartMixerWithHub;p.AutoHideHub=AutoHideHub;p.AutoHideMixer=AutoHideMixer;p.AutoHideTaskMenu=AutoHideTaskMenu;p.StartTaskMenuWithHub=StartTaskMenuWithHub;if(Bindings!=null)foreach(var b in Bindings)p.Bindings[b.Key]=b.Value;return p; }
+        public ControlsProfile Clone() { var p=new ControlsProfile();p.AutoHideMiniIcons=AutoHideMiniIcons;p.StartMiniIconsWithHub=StartMiniIconsWithHub;p.TaskMenuLayer=TaskMenuLayerPolicy.Normalize(TaskMenuLayer);p.ShowTaskMenuEdges=ShowTaskMenuEdges;p.StartMixerWithHub=StartMixerWithHub;p.AutoHideHub=AutoHideHub;p.AutoHideMixer=AutoHideMixer;p.AutoHideTaskMenu=AutoHideTaskMenu;p.StartTaskMenuWithHub=StartTaskMenuWithHub;if(Bindings!=null)foreach(var b in Bindings)p.Bindings[b.Key]=b.Value;return p; }
     }
     public sealed class KeyChord
     {
@@ -96,6 +99,8 @@ namespace ReFix.Shared
         ControlsProfile Read(){var p=ReadJson<ControlsProfile>(file);if(p==null)return null;try{return Validate(p);}catch(ArgumentException){return null;}}
         static ControlsProfile Validate(ControlsProfile profile) {
             var p=profile.Clone();foreach(var b in p.Bindings)ControlActions.Find(b.Key);
+            // A newly introduced default must not invalidate a user's older saved bindings.
+            if(profile.Bindings!=null&&!profile.Bindings.ContainsKey("mini-icons.toggle"))foreach(var b in p.Bindings)if(b.Key!="mini-icons.toggle"&&KeyChord.Parse(b.Value).Gesture=="Ctrl+Alt+I"){p.Bindings["mini-icons.toggle"]="";break;}
             foreach(var a in ControlActions.All){var c=KeyChord.Parse(p.Get(a.Id));if(c.VirtualKey!=0&&a.Scope=="global"&&(c.Modifiers&3)==0)throw new ArgumentException("Global shortcuts require Ctrl or Alt");p.Bindings[a.Id]=c.Gesture;}
             for(int i=0;i<ControlActions.All.Count;i++)for(int j=i+1;j<ControlActions.All.Count;j++){var a=ControlActions.All[i];var b=ControlActions.All[j];if(p.Get(a.Id)!=""&&p.Get(a.Id)==p.Get(b.Id)&&(a.Scope==b.Scope||a.Scope=="global"||b.Scope=="global"))throw new ArgumentException("Shortcut conflicts: "+a.Name+" / "+b.Name);}
             return p;
@@ -110,11 +115,11 @@ namespace ReFix.Shared
         public void Assign(string actionId,string gesture){ControlActions.Find(actionId);var p=Current;p.Bindings[actionId]=gesture;Save(p);}
         public void Save(ControlsProfile profile){if(profile==null)throw new ArgumentNullException("profile");var p=Validate(profile);lock(gate){if(disposed)throw new ObjectDisposedException("ControlsStore");foreach(var a in ControlActions.All)if(a.Scope=="global"&&p.Get(a.Id)!=""&&p.Get(a.Id)!=current.Get(a.Id))Probe(a.Id,p.Get(a.Id));WriteAtomic(file,p);current=p;}Raise(Changed);}
         void Probe(string action,string gesture){var live=GetRuntime(action);if(live!=null&&live.Actual==gesture)return;var c=KeyChord.Parse(gesture);Exception error=null;var t=new Thread(delegate(){if(!ControlsNative.RegisterHotKey(IntPtr.Zero,0x3FF0,c.Modifiers|0x4000,c.VirtualKey)){error=new InvalidOperationException("Shortcut is unavailable in Windows: "+gesture);return;}ControlsNative.UnregisterHotKey(IntPtr.Zero,0x3FF0);});t.Start();t.Join();if(error!=null)throw error;}
-        public void ResetDefaults(){var defaults=new ControlsProfile();var previous=Current;defaults.TaskMenuLayer=previous.TaskMenuLayer;defaults.ShowTaskMenuEdges=previous.ShowTaskMenuEdges;defaults.StartMixerWithHub=previous.StartMixerWithHub;defaults.AutoHideHub=previous.AutoHideHub;defaults.AutoHideMixer=previous.AutoHideMixer;defaults.AutoHideTaskMenu=previous.AutoHideTaskMenu;defaults.StartTaskMenuWithHub=previous.StartTaskMenuWithHub;Save(defaults);}
+        public void ResetDefaults(){var defaults=new ControlsProfile();var previous=Current;defaults.AutoHideMiniIcons=previous.AutoHideMiniIcons;defaults.StartMiniIconsWithHub=previous.StartMiniIconsWithHub;defaults.TaskMenuLayer=previous.TaskMenuLayer;defaults.ShowTaskMenuEdges=previous.ShowTaskMenuEdges;defaults.StartMixerWithHub=previous.StartMixerWithHub;defaults.AutoHideHub=previous.AutoHideHub;defaults.AutoHideMixer=previous.AutoHideMixer;defaults.AutoHideTaskMenu=previous.AutoHideTaskMenu;defaults.StartTaskMenuWithHub=previous.StartTaskMenuWithHub;Save(defaults);}
         internal static void WriteAtomic(string path,object value){string tmp=path+"."+Guid.NewGuid().ToString("N")+".tmp";try{File.WriteAllText(tmp,new JavaScriptSerializer().Serialize(value));if(File.Exists(path))File.Replace(tmp,path,null);else File.Move(tmp,path);}finally{if(File.Exists(tmp))File.Delete(tmp);}}
         internal string RuntimePath(string id,int pid,long ticks){return Path.Combine(runtime,id+"."+pid+"."+ticks+".json");}
         public HotkeyRuntimeStatus GetRuntime(string actionId){ControlActions.Find(actionId);HotkeyRuntimeStatus found=null;foreach(string path in Directory.GetFiles(runtime,actionId+".*.json")){var s=ReadJson<HotkeyRuntimeStatus>(path);if(s==null||s.ActionId!=actionId||!ControlsNative.Alive(s))continue;if(found==null||s.ProcessStartTicks>found.ProcessStartTicks)found=s;}return found;}
-        public void Dispose(){lock(gate){if(disposed)return;disposed=true;watcher.Dispose();runtimeWatcher.Dispose();reloadTimer.Dispose();}}
+        public void Dispose(){lock(gate){if(disposed)return;disposed=true;}watcher.Dispose();runtimeWatcher.Dispose();reloadTimer.Dispose();}
     }
     public sealed class GlobalKeyRegistration : IDisposable
     {

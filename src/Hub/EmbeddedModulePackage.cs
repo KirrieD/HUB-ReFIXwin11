@@ -14,16 +14,16 @@ namespace ReFix.Hub
         private readonly byte[] bytes;
         internal ModuleManifest Manifest { get; private set; }
         private EmbeddedModulePackage(byte[] data,ModuleManifest manifest){bytes=data;Manifest=manifest;}
-        internal static EmbeddedModulePackage Load()
+        internal static EmbeddedModulePackage Load(string resource="ReFix.TaskMenu.zip",string id="task-menu",string executable="TaskMenu.exe")
         {
-            using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("ReFix.TaskMenu.zip"))
+            using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream(resource))
             {
                 if(stream==null)return null;
                 if(stream.Length>PackageSafety.MaxArchive)throw new InvalidDataException("Embedded module is too large.");
-                using(var buffer=new MemoryStream()){stream.CopyTo(buffer);return Read(buffer.ToArray());}
+                using(var buffer=new MemoryStream()){stream.CopyTo(buffer);return Read(buffer.ToArray(),id,executable);}
             }
         }
-        internal static EmbeddedModulePackage Read(byte[] data)
+        internal static EmbeddedModulePackage Read(byte[] data,string id="task-menu",string executable="TaskMenu.exe")
         {
             if(data==null||data.Length==0||data.Length>PackageSafety.MaxArchive)throw new InvalidDataException("Invalid embedded module size.");
             ModuleManifest manifest;
@@ -32,7 +32,7 @@ namespace ReFix.Hub
                 var entries=zip.Entries.Where(e=>e.FullName=="module.json").ToArray();
                 if(entries.Length!=1||entries[0].Length>65536)throw new InvalidDataException("Invalid embedded module metadata.");
                 using(var reader=new StreamReader(entries[0].Open()))manifest=new JavaScriptSerializer().Deserialize<ModuleManifest>(reader.ReadToEnd());
-                if(manifest==null||manifest.Id!="task-menu"||manifest.Version!=ReFix.Shared.ProductInfo.Version||manifest.EntryPoint!="TaskMenu.exe"||manifest.Kind!="process"||!zip.Entries.Any(e=>e.FullName==manifest.EntryPoint))throw new InvalidDataException("Embedded module identity mismatch.");
+                if(manifest==null||manifest.Id!=id||manifest.Version!=ReFix.Shared.ProductInfo.Version||manifest.EntryPoint!=executable||manifest.Kind!="process"||!zip.Entries.Any(e=>e.FullName==manifest.EntryPoint))throw new InvalidDataException("Embedded module identity mismatch.");
             }
             using(var hash=SHA256.Create())manifest.Sha256=BitConverter.ToString(hash.ComputeHash(data)).Replace("-","").ToLowerInvariant();
             manifest.PackageUrl="";manifest.Validate();

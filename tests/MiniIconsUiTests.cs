@@ -1,0 +1,28 @@
+#if MINI_ICONS_UI_FIXTURE
+using System;using System.IO;using System.Linq;using System.Reflection;using System.Threading;using System.Windows;using System.Windows.Controls;using System.Windows.Controls.Primitives;using System.Windows.Interop;using System.Windows.Media;using System.Windows.Media.Imaging;using System.Windows.Threading;using ReFix.Shared;using ReFix.MiniIcons;using ReFix.TaskMenu;
+namespace ReFix.Tests{
+ static class MiniIconsUiTests{
+  static int failures;static void Check(string name,bool ok){Console.WriteLine((ok?"PASS ":"FAIL ")+name);if(!ok)failures++;}
+  static void Pump(int ms=150){var end=DateTime.UtcNow.AddMilliseconds(ms);do{var frame=new DispatcherFrame();Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>frame.Continue=false));Dispatcher.PushFrame(frame);Thread.Sleep(5);}while(DateTime.UtcNow<end);}
+  static T Find<T>(DependencyObject root,Func<T,bool> match)where T:DependencyObject{var value=root as T;if(value!=null&&match(value))return value;for(int i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var result=Find<T>(VisualTreeHelper.GetChild(root,i),match);if(result!=null)return result;}return null;}
+  static bool ColorExists(Image image){var source=(BitmapSource)image.Source;var converted=new FormatConvertedBitmap(source,PixelFormats.Bgra32,null,0);byte[] bytes=new byte[converted.PixelWidth*converted.PixelHeight*4];converted.CopyPixels(bytes,converted.PixelWidth*4,0);for(int i=0;i<bytes.Length;i+=4)if(bytes[i+2]==23&&bytes[i+1]==198&&bytes[i]==110&&bytes[i+3]>0)return true;return false;}
+  [STAThread]static int Main(){var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};string root=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"mini-ui-"+Guid.NewGuid().ToString("N"));string old=Environment.GetEnvironmentVariable("REFIX_DATA_ROOT");Environment.SetEnvironmentVariable("REFIX_DATA_ROOT",root);
+   try{using(var themes=new ThemeStore(root,"mini-icons"))using(var global=new ThemeStore(root))using(var controls=new ControlsStore(root))using(var source=new HwndSource(new HwndSourceParameters("Mini icon fixture"){Width=0,Height=0,WindowStyle=unchecked((int)0x80000000)}))using(var topology=new Topology(source))using(var tray=new System.Windows.Forms.NotifyIcon())using(var mixerTray=new System.Windows.Forms.NotifyIcon()){
+    int click=0,right=0;using(var client=new MiniTrayClient(root,"hub","HUB fixture",ProductInfo.Version,tray,()=>click++, (x,y)=>right++,global))using(var mixer=new MiniTrayClient(root,"quiet-mixer","Mixer fixture",ProductInfo.Version,mixerTray,()=>{},(x,y)=>{},global)){
+     var controller=new Controller(app,themes,controls,topology);try{
+      Pump();Check("ready container publishes a live verified host",MiniTrayFiles.ReadHost(root)!=null);Check("ready container hides first-party system tray icons",!tray.Visible&&!mixerTray.Visible);Check("arrow stays outside Windows taskbar and Alt-Tab",controller.Edge.IsVisible&&DockPresentation.IsToolWindow(controller.Edge.Handle));
+      controller.ShowPopup();Pump();Check("mini popup opens with two live icons and settings icon",controller.Popup.IsVisible&&Find<UniformGrid>(controller.Popup,g=>true).Children.Count==3);Check("third-party separator is hidden initially",Find<Button>(controller.Popup,b=>Convert.ToString(b.Content).StartsWith("Сторонние приложения")).Visibility==Visibility.Collapsed);
+      var stale=MiniTrayFiles.ReadEntries(root).ToList();stale.Add(new MiniTrayEntry{Id="stale-fixture",Name="Crashed fixture",Version=ProductInfo.Version});controller.Popup.Hide();controller.Popup.Refresh(new MiniIconsStore(root).Load(),stale,themes.Current);controller.ShowPopup();Pump();Check("reopening revalidates entries even without file notifications",Find<UniformGrid>(controller.Popup,g=>true).Children.Count==3);
+      var button=Find<Button>(controller.Popup,b=>(b.ToolTip as string??"").StartsWith("HUB fixture"));button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();Check("mini popup invokes original running application action",click==1);
+      controller.ShowPopup();controller.Transfer("hub",true);Pump();Check("returning icon restores original tray and persists selection",tray.Visible&&!new MiniIconsStore(root).Load().OwnTransfers.Contains("hub"));
+      var entry=MiniTrayFiles.ReadEntries(root).Single(e=>e.Id=="hub");MiniTrayFiles.RequestTransfer(entry,MiniTrayFiles.ReadHost(root),false);Pump();Check("native cursor or menu transfer request adds the original icon",!tray.Visible&&new MiniIconsStore(root).Load().OwnTransfers.Contains("hub")&&controller.Popup.IsVisible);
+      var p=global.Current;p.Mode="Custom";p.Accent="#17C66E";p.IconFamily="ReFIX";p.IconFollowTheme=true;global.Save(p);Pump(420);button=Find<Button>(controller.Popup,b=>(b.ToolTip as string??"").StartsWith("HUB fixture"));Check("live scoped icon artwork changes with user theme",button!=null&&ColorExists((Image)button.Content));
+
+      controller.Popup.UpdateLayout();var bitmap=new RenderTargetBitmap((int)controller.Popup.ActualWidth,(int)controller.Popup.ActualHeight,96,96,PixelFormats.Pbgra32);bitmap.Render((Visual)controller.Popup.Content);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bitmap));using(var output=File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"mini-icons-popup.png")))png.Save(output);
+     }finally{controller.Dispose();}Pump();Check("container stop restores system tray without killing apps",tray.Visible&&mixerTray.Visible&&MiniTrayFiles.ReadHost(root)==null);
+    }
+   }return failures;}catch(Exception ex){Console.WriteLine(ex);return 1;}finally{app.Shutdown();Environment.SetEnvironmentVariable("REFIX_DATA_ROOT",old);if(Directory.Exists(root))Directory.Delete(root,true);}
+  }
+ }
+}
+#endif

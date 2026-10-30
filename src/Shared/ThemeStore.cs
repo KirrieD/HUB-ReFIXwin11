@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading;
@@ -23,7 +23,7 @@ namespace ReFix.Shared
         public ThemeStore(string root):this(root,null){}
         public ThemeStore(string root,string scope) {
             if(String.IsNullOrWhiteSpace(root))throw new ArgumentException("A data root is required","root");
-            if(scope!=null&&scope!="quiet-mixer"&&scope!="task-menu")throw new ArgumentException("Unknown theme scope","scope");
+            if(scope!=null&&scope!="quiet-mixer"&&scope!="task-menu"&&scope!="mini-icons")throw new ArgumentException("Unknown theme scope","scope");
             this.root=Path.GetFullPath(root);this.scope=scope;Directory.CreateDirectory(this.root);globalFile=Path.Combine(this.root,"theme.json");file=scope==null?globalFile:Path.Combine(this.root,"theme."+scope+".json");
             current=Read<ThemeProfile>(globalFile)??new ThemeProfile();current.Normalize();scoped=(scope==null?null:Read<ScopeSettings>(file))??new ScopeSettings();NormalizeScope(scoped);
             saveTimer=new Timer(WritePending,null,Timeout.Infinite,Timeout.Infinite);readTimer=new Timer(Reload,null,Timeout.Infinite,Timeout.Infinite);

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -15,7 +15,7 @@ namespace ReFix.Hub
         private readonly ThemeStore store;
         private ThemeProfile profile;
         private ThemeStore editing;
-        private readonly ThemeStore mixer,menu;
+        private readonly ThemeStore mixer,menu,miniIcons;
         private readonly ComboBox target=new ComboBox { Margin=new Thickness(0,4,0,8) };
         private readonly StackPanel selection=new StackPanel();
         private readonly CheckBox inherit=new CheckBox { Content="Наследовать оформление HUB" };
@@ -24,9 +24,10 @@ namespace ReFix.Hub
         private readonly TextBlock note=Ui.Text("Изменения видны сразу и сохраняются автоматически.",11,"Hub.Muted");
         private readonly ComboBox mode=new ComboBox { MinWidth=140,Margin=new Thickness(0,6,0,12) };
         private readonly StackPanel custom=new StackPanel();
+        private readonly StackPanel iconFields=new StackPanel();
         internal StyleWindow(ThemeStore themes)
         {
-            store=themes;editing=store;mixer=new ThemeStore(themes.Root,"quiet-mixer");menu=new ThemeStore(themes.Root,"task-menu"); profile=themes.GlobalCurrent; Title="HUB ReFIX — оформление";
+            store=themes;editing=store;mixer=new ThemeStore(themes.Root,"quiet-mixer");menu=new ThemeStore(themes.Root,"task-menu");miniIcons=new ThemeStore(themes.Root,"mini-icons"); profile=themes.GlobalCurrent; Title="HUB ReFIX — оформление";
             Width=470;Height=750;MinWidth=420;MinHeight=480;WindowStartupLocation=WindowStartupLocation.CenterOwner;
             WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;ResizeMode=ResizeMode.CanResizeWithGrip;
             Ui.Styles(this);
@@ -41,13 +42,13 @@ namespace ReFix.Hub
             StackPanel content=new StackPanel();
             content.Children.Add(Ui.Text("Режим оформления",13,"Hub.Foreground"));
             mode.Items.Add("Система");mode.Items.Add("Пользовательская");mode.SelectedIndex=profile.Mode=="Custom"?1:0;content.Children.Add(mode);
-            TextBlock hint=Ui.Text("Система использует тему, акцент и контрастность Windows. В пользовательском режиме HUB, Микшер и Меню задач можно настроить отдельно.",12,"Hub.Muted");hint.Margin=new Thickness(0,0,0,16);content.Children.Add(hint);
-            content.Children.Add(custom);
-            target.Items.Add("Настройка HUB");target.Items.Add("Настройка Микшера");target.Items.Add("Настройка Меню задач");target.SelectedIndex=0;
+            TextBlock hint=Ui.Text("Система использует тему, акцент и контрастность Windows. В пользовательском режиме HUB, Микшер, Меню задач и Мини значки можно настроить отдельно.",12,"Hub.Muted");hint.Margin=new Thickness(0,0,0,16);content.Children.Add(hint);
+            content.Children.Add(iconFields);content.Children.Add(custom);
+            target.Items.Add("Настройка HUB");target.Items.Add("Настройка Микшера");target.Items.Add("Настройка Меню задач");target.Items.Add("Настройка Мини значков");target.SelectedIndex=0;
             System.Windows.Automation.AutomationProperties.SetName(target,"Объект оформления");
             selection.Children.Add(target);selection.Children.Add(inherit);
             TextBlock inheritanceHint=Ui.Text("Расширения по умолчанию повторяют HUB. Изменение параметра включает отдельное оформление. Режим Система един для всех окон.",11,"Hub.Muted");selection.Children.Add(inheritanceHint);
-            content.Children.Insert(content.Children.Count-1,selection);
+            content.Children.Insert(content.Children.Count-2,selection);
             target.SelectionChanged+=delegate{SelectTarget();};
             inherit.Checked+=delegate{SetInheritance(true);};inherit.Unchecked+=delegate{SetInheritance(false);};
             BuildFields();
@@ -58,15 +59,15 @@ namespace ReFix.Hub
                 if(refreshing)return;ThemeProfile global=store.GlobalCurrent;global.Mode=mode.SelectedIndex==1?"Custom":"System";store.Save(global);SelectTarget();
             };
             UpdateSelection();
-            store.Changed+=OnThemeChanged;mixer.Changed+=OnThemeChanged;menu.Changed+=OnThemeChanged;
-            Closed+=delegate{store.Changed-=OnThemeChanged;mixer.Changed-=OnThemeChanged;menu.Changed-=OnThemeChanged;mixer.Dispose();menu.Dispose();};
+            store.Changed+=OnThemeChanged;mixer.Changed+=OnThemeChanged;menu.Changed+=OnThemeChanged;miniIcons.Changed+=OnThemeChanged;
+            Closed+=delegate{store.Changed-=OnThemeChanged;mixer.Changed-=OnThemeChanged;menu.Changed-=OnThemeChanged;miniIcons.Changed-=OnThemeChanged;mixer.Dispose();menu.Dispose();miniIcons.Dispose();};
             KeyDown+=delegate(object sender,KeyEventArgs e){if(e.Key==Key.Escape)Close();};
             SizeChanged+=delegate{layers.Clip=new RectangleGeometry(new Rect(0,0,layers.ActualWidth,layers.ActualHeight),frame.CornerRadius.TopLeft,frame.CornerRadius.TopLeft);Ui.Apply(this,store.Current,frame,image);};
             Ui.Apply(this,store.GlobalCurrent,frame,image);
         }
         private void BuildFields()
         {
-            generation++;int fieldsVersion=generation;custom.Children.Clear();
+            generation++;int fieldsVersion=generation;custom.Children.Clear();BuildIconFields(fieldsVersion);
             Heading("Цвета RGB");
             ColorEditor("Фон",delegate{return profile.Background;},delegate(string v){profile.Background=v;});
             ColorEditor("Панели и элементы",delegate{return profile.Surface;},delegate(string v){profile.Surface=v;});
@@ -94,11 +95,25 @@ namespace ReFix.Hub
             Number("Вертикальное положение",profile.ImageY,0,1,"%",delegate(double v){profile.ImageY=v;});
             TextBlock imageHint=Ui.Text("Параметры изображения передаются расширениям. В каждом окне сохраняются пропорции и выбранное положение.",11,"Hub.Muted");imageHint.Margin=new Thickness(0,8,0,12);custom.Children.Add(imageHint);
         }
+        private void BuildIconFields(int version)
+        {
+            iconFields.Children.Clear();
+            TextBlock heading=Ui.Text("Значки приложений",16,"Hub.Foreground");heading.Margin=new Thickness(0,18,0,8);iconFields.Children.Add(heading);
+            ComboBox family=new ComboBox { Margin=new Thickness(0,4,0,8) };
+            family.Items.Add("Цветные (B)");family.Items.Add("ReFIX — ромб (C)");family.Items.Add("Контурные (A)");
+            family.SelectedIndex=profile.IconFamily=="ReFIX"?1:profile.IconFamily=="Outline"?2:0;
+            System.Windows.Automation.AutomationProperties.SetName(family,"Семейство значков");
+            family.SelectionChanged+=delegate{if(version!=generation)return;profile.IconFamily=family.SelectedIndex==1?"ReFIX":family.SelectedIndex==2?"Outline":"Color";Save();};iconFields.Children.Add(family);
+            CheckBox tint=new CheckBox { Content="Использовать цвета пользовательской темы",IsChecked=profile.IconFollowTheme,Margin=new Thickness(0,4,0,8) };
+            tint.Checked+=delegate{if(version!=generation)return;profile.IconFollowTheme=true;Save();};
+            tint.Unchecked+=delegate{if(version!=generation)return;profile.IconFollowTheme=false;Save();};iconFields.Children.Add(tint);
+            TextBlock hint=Ui.Text("Цветные значки различают приложения. В пользовательском режиме значки используют акцент и основной цвет текста; в режиме Система сохраняется исходная палитра.",11,"Hub.Muted");hint.Margin=new Thickness(0,0,0,8);iconFields.Children.Add(hint);
+        }
         private ThemeProfile EditableProfile(){return editing==store?store.GlobalCurrent:editing.ScopeOverrideEnabled?editing.ScopedCurrent:editing.Current;}
         private void SelectTarget()
         {
             // Invalidate detached controls before replacing the selected profile.
-            generation++;editing=target.SelectedIndex==1?mixer:target.SelectedIndex==2?menu:store;
+            generation++;editing=store.GlobalCurrent.Mode!="Custom"?store:target.SelectedIndex==1?mixer:target.SelectedIndex==2?menu:target.SelectedIndex==3?miniIcons:store;
             profile=EditableProfile();
             BuildFields();UpdateSelection();
         }

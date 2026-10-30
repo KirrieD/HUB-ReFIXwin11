@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -100,7 +100,7 @@ namespace ReFix.Hub
                     else if(message==Quit)Forms.Application.ExitThread();
                     else if(message==0x8103){refreshTray();string failure=Interlocked.Exchange(ref backgroundNotice,null);if(failure!=null)report(failure);}
                     else if(message==UpdateCoordinator.Message&&updater!=null)updater.ProcessMessage();
-                    else if((uint)message==recreated){tray.Visible=false;tray.Visible=true;}
+                    else if((uint)message==recreated){refreshTray();}
                 };
                 hubKey=new GlobalKeyRegistration(controls,"hub.toggle",listener.Handle,100,toggle);
                 menu.Items.Add("Открыть HUB",null,delegate{show();});
@@ -110,7 +110,9 @@ namespace ReFix.Hub
                 tray.Icon=System.Drawing.SystemIcons.Shield;refreshTray();tray.ContextMenuStrip=menu;
                 EventHandler bindingsChanged=delegate{Native.PostMessage(listener.Handle,0x8103,IntPtr.Zero,IntPtr.Zero);};controls.Changed+=bindingsChanged;controls.RuntimeChanged+=bindingsChanged;
                 tray.MouseClick+=delegate(object sender,Forms.MouseEventArgs e){if(e.Button==Forms.MouseButtons.Left)toggle();};
+                MiniTrayClient miniTray=null;
                 bool render=args.Length>=2 && args[0]=="--render";tray.Visible=!render;
+                if(!render)miniTray=new MiniTrayClient(Paths.Root,"hub","HUB ReFIX",ProductInfo.Version,tray,toggle,delegate(int x,int y){menu.Show(x,y);},themes);
                 updater=new UpdateCoordinator(Paths.Root,AppDomain.CurrentDomain.BaseDirectory,listener.Handle,report,delegate{Forms.Application.ExitThread();});
                 uint own=(uint)Process.GetCurrentProcess().Id;
                 Native.WinEventProc observer=delegate(IntPtr hook,uint evt,IntPtr target,int obj,int child,uint thread,uint time)
@@ -135,7 +137,7 @@ namespace ReFix.Hub
                 finally
                 {
                     if(firstShow!=null)Forms.Application.Idle-=firstShow;
-                    updater.Dispose();controls.Changed-=bindingsChanged;controls.RuntimeChanged-=bindingsChanged;hubKey.Dispose();tray.Visible=false;if(foreground!=IntPtr.Zero)Native.UnhookWinEvent(foreground);
+                    if(miniTray!=null)miniTray.Dispose();updater.Dispose();controls.Changed-=bindingsChanged;controls.RuntimeChanged-=bindingsChanged;hubKey.Dispose();tray.Visible=false;if(foreground!=IntPtr.Zero)Native.UnhookWinEvent(foreground);
                     if(session!=null)session.Close();GC.KeepAlive(observer);
                 }
             }
@@ -147,7 +149,7 @@ namespace ReFix.Hub
             var errors=new System.Collections.Generic.List<Exception>();
             try{await new LegacyMixerMigration(manager,Paths.Root).RunAsync();}catch(Exception ex){errors.Add(ex);}
             var profile=controls.Current;
-            if(profile.StartMixerWithHub||profile.StartTaskMenuWithHub)
+            if(profile.StartMixerWithHub||profile.StartTaskMenuWithHub||profile.StartMiniIconsWithHub)
             {
                 await manager.RefreshStatesAsync();
                 try{await ResumeEnabledModules(profile,manager.Modules,manager.StartAsync);}catch(AggregateException ex){errors.AddRange(ex.InnerExceptions);}
@@ -157,9 +159,9 @@ namespace ReFix.Hub
         internal static async Task ResumeEnabledModules(ControlsProfile profile,System.Collections.Generic.IEnumerable<ModuleView> modules,Func<ModuleView,Task> start)
         {
             var errors=new System.Collections.Generic.List<Exception>();
-            foreach(string id in new[]{"quiet-mixer","task-menu"})
+            foreach(string id in new[]{"mini-icons","quiet-mixer","task-menu"})
             {
-                if(id=="quiet-mixer"?!profile.StartMixerWithHub:!profile.StartTaskMenuWithHub)continue;
+                if(id=="quiet-mixer"?!profile.StartMixerWithHub:id=="task-menu"?!profile.StartTaskMenuWithHub:!profile.StartMiniIconsWithHub)continue;
                 ModuleView module=modules.FirstOrDefault(delegate(ModuleView view){return view.Manifest.Id==id;});
                 if(module==null||module.State!="OFF")continue;
                 try{await start(module);}catch(Exception ex){errors.Add(ex);}

@@ -34,6 +34,9 @@ namespace ReFix.QuickNote
                     source.AddHook(delegate(IntPtr h,int msg,IntPtr w,IntPtr l,ref bool handled){handled=keys.ProcessMessage(msg,w);return IntPtr.Zero;});
                     EventHandler changed=delegate { app.Dispatcher.BeginInvoke(new Action(delegate { window.ApplyTheme(themes.Current); })); };
                     themes.Changed+=changed;
+                    using(var tray=new System.Windows.Forms.NotifyIcon{Text="Быстрая заметка",Icon=System.Drawing.SystemIcons.Application,Visible=true})
+                    using(var menu=new System.Windows.Forms.ContextMenuStrip())
+                    using(var miniTray=AttachTray(tray,menu,show,app,window,themes))
                     using(ModuleRuntime runtime=new ModuleRuntime("quick-note",
                         delegate { app.Dispatcher.BeginInvoke(show); },
                         delegate { app.Dispatcher.BeginInvoke(new Action(delegate { window.Save(); app.Shutdown(); })); }))
@@ -47,6 +50,11 @@ namespace ReFix.QuickNote
                     }}
                 }
             }
+        }
+        static MiniTrayClient AttachTray(System.Windows.Forms.NotifyIcon tray,System.Windows.Forms.ContextMenuStrip menu,Action show,Application app,NoteWindow window,ThemeStore themes)
+        {
+            menu.Items.Add("Открыть заметку",null,delegate{show();});menu.Items.Add("Выйти",null,delegate{window.Save();app.Shutdown();});tray.ContextMenuStrip=menu;tray.MouseClick+=delegate(object sender,System.Windows.Forms.MouseEventArgs e){if(e.Button==System.Windows.Forms.MouseButtons.Left)show();};
+            return new MiniTrayClient(Paths.Root,"quick-note","Быстрая заметка",ProductInfo.Version,tray,show,delegate(int x,int y){menu.Show(x,y);},themes);
         }
     }
     internal sealed class NoteWindow : Window, IDisposable

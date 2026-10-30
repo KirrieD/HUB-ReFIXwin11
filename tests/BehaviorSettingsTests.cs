@@ -33,12 +33,12 @@ namespace ReFix.Tests
                     var window=new BehaviorWindow(themes,controls,delegate{return startup;},delegate(bool value){startup=value;});
                     try
                     {
-                        window.Show();window.UpdateLayout();ExpandAll(window);window.UpdateLayout();report("behavior has three collapsible application sections",CountSections(window)==3);
+                        window.Show();window.UpdateLayout();ExpandAll(window);window.UpdateLayout();report("behavior has four collapsible application sections",CountSections(window)==4);
                         var check=Find(window,"Скрывать Микшер");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         report("behavior checkbox saves immediately",controls.Current.AutoHideMixer);
                         check=Find(window,"Автозапуск HUB");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         report("HUB startup uses isolated registration adapter",startup);
-                        report("behavior retains six independent checkboxes",Count(window)==6);
+                        report("behavior retains eight independent checkboxes",Count(window)==8);
                         var partial=FindRadio(window,"Частично");partial.IsChecked=true;partial.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));report("menu layering choice saves immediately",controls.Current.TaskMenuLayer==TaskMenuLayer.ExceptFullscreen);
                         var hide=FindRadio(window,"Убрать грани");hide.IsChecked=true;hide.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));report("edge visibility is independent from menu layering",!controls.Current.ShowTaskMenuEdges&&controls.Current.TaskMenuLayer==TaskMenuLayer.ExceptFullscreen);
                         report("layer and edge choices are mutually exclusive",FindRadio(window,"Поверх всех окон (стандарт)").IsChecked==false&&FindRadio(window,"Ниже всех окон").IsChecked==false&&FindRadio(window,"Показать грани").IsChecked==false);

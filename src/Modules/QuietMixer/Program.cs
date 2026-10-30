@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -90,7 +90,7 @@ namespace QuietMixer
                     if(msg==Native.ToggleMessage) { toggle(); handled=true; }
                     if(msg==Native.ExitMessage) { app.Shutdown(); handled=true; }
                     if(msg==0x7E || msg==0x1A) listener.Refresh();
-                    if((uint)msg==taskbarCreated) { tray.Visible=false; tray.Visible=true; listener.Refresh(); }
+                    if((uint)msg==taskbarCreated) { listener.Refresh(); }
                     return IntPtr.Zero;
                 });
 
@@ -105,6 +105,7 @@ namespace QuietMixer
                 app.Exit+=delegate { tray.Visible=false;  if(popup!=null) popup.Close(); menu.Dispose(); };
                 EventHandler changed=delegate { app.Dispatcher.BeginInvoke(new Action(delegate { if(popup!=null) popup.ApplyTheme(themes.Current); })); };
                 themes.Changed+=changed;
+                using(var miniTray=new MiniTrayClient(Paths.Root,"quiet-mixer","Микшер громкости",ProductInfo.Version,tray,toggle,delegate(int x,int y){menu.Show(x,y);},themes))
                 using(ModuleRuntime runtime=new ModuleRuntime("quiet-mixer",
                     delegate { app.Dispatcher.BeginInvoke(show); },
                     delegate { app.Dispatcher.BeginInvoke(new Action(delegate { app.Shutdown(); })); }))

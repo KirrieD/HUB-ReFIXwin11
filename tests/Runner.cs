@@ -27,6 +27,8 @@ namespace ReFix.Tests
             Group("task menu shortcut ownership and position",delegate{TaskMenuOwnershipTests.Run(Report);});
             Group("behavior settings",delegate{BehaviorSettingsTests.Run(Report);});
             Group("task menu layering preferences",delegate{TaskMenuLayerTests.Run(Report);});
+            Group("mini icons configuration",delegate{MiniIconsModelTests.Run(Report);});
+            Group("mini icons compatibility",delegate{MiniIconsRegressionTests.Run(Report);});
             Group("opaque settings surfaces",delegate{SettingsSurfaceTests.Run(Report);});
             Group("HUB presentation and placement",delegate{HubPresentationTests.Run(Report);});
             Group("mixer layout settings",delegate{MixerLayoutTests.Run(Report);});

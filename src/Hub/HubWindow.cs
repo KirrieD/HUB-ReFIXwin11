@@ -263,13 +263,13 @@ namespace ReFix.Hub
             string message="Удалить «"+View.Manifest.Name+"»? Работающая утилита будет остановлена. Личные данные и оформление сохранятся.";
             MessageBoxResult decision=owner==null?MessageBox.Show(message,"Удаление утилиты",MessageBoxButton.YesNo,MessageBoxImage.Question):MessageBox.Show(owner,message,"Удаление утилиты",MessageBoxButton.YesNo,MessageBoxImage.Question);
             if(decision!=MessageBoxResult.Yes)return;
-            Run(async delegate { await manager.UninstallAsync(View);if(View.Manifest.Id=="quiet-mixer"||View.Manifest.Id=="task-menu"){var p=controls.Current;if(View.Manifest.Id=="quiet-mixer")p.StartMixerWithHub=false;else p.StartTaskMenuWithHub=false;controls.Save(p);} });
+            Run(async delegate { await manager.UninstallAsync(View);if(View.Manifest.Id=="quiet-mixer"||View.Manifest.Id=="task-menu"||View.Manifest.Id=="mini-icons"){var p=controls.Current;if(View.Manifest.Id=="quiet-mixer")p.StartMixerWithHub=false;else if(View.Manifest.Id=="task-menu")p.StartTaskMenuWithHub=false;else p.StartMiniIconsWithHub=false;controls.Save(p);} });
         }
         private void InvokePrimary(){Run(async delegate
         {
             if(View.State=="NO"){await manager.InstallAsync(View);return;}
             bool enable=View.State!="ON";if(enable)await manager.StartAsync(View);else await manager.StopAsync(View);
-            if(View.Manifest.Id=="quiet-mixer"||View.Manifest.Id=="task-menu"){ControlsProfile profile=controls.Current;if(View.Manifest.Id=="quiet-mixer")profile.StartMixerWithHub=enable;else profile.StartTaskMenuWithHub=enable;controls.Save(profile);}
+            if(View.Manifest.Id=="quiet-mixer"||View.Manifest.Id=="task-menu"||View.Manifest.Id=="mini-icons"){ControlsProfile profile=controls.Current;if(View.Manifest.Id=="quiet-mixer")profile.StartMixerWithHub=enable;else if(View.Manifest.Id=="task-menu")profile.StartTaskMenuWithHub=enable;else profile.StartMiniIconsWithHub=enable;controls.Save(profile);}
             if(enable&&View.Manifest.Kind=="process")await manager.ShowAsync(View);
         });}
         internal void ApplyPreview(ThemeProfile profile){previewWindow.ApplyTheme(profile);}

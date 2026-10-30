@@ -15,7 +15,8 @@ New-Item -ItemType Directory -Path $packages -Force | Out-Null
 $modules = @(
     @{ Id='quiet-mixer'; Name='Микшер громкости'; Description='Громкость устройства и приложений, настраиваемая горячая клавиша.'; Source='QuietMixer'; Exe='QuietMixer.exe'; Preview='mixer' },
     @{ Id='quick-note'; Name='Быстрая заметка'; Description='Локальная заметка с общей темой и сохранением при скрытии.'; Source='QuickNote'; Exe='QuickNote.exe'; Preview='notes' },
-    @{ Id='task-menu'; Name='Меню задач'; Description='Независимые панели файлов и папок по краям каждого экрана. Плавное раскрытие при наведении.'; Source='TaskMenu'; Exe='TaskMenu.exe'; Preview='menu' }
+    @{ Id='task-menu'; Name='Меню задач'; Description='Независимые панели файлов и папок по краям каждого экрана. Плавное раскрытие при наведении.'; Source='TaskMenu'; Exe='TaskMenu.exe'; Preview='menu' },
+    @{ Id='mini-icons'; Name='Мини значки'; Description='Общее мини-меню значков HUB и расширений рядом с панелью задач.'; Source='MiniIcons'; Exe='MiniIcons.exe'; Preview='mini-icons' }
 )
 $versionText = Get-Content -LiteralPath (Join-Path $root 'src\Shared\ProductInfo.cs') -Raw
 if ($versionText -notmatch 'public const string Version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"') { throw 'Missing canonical product version' }
@@ -26,9 +27,10 @@ foreach ($module in $modules) {
     $stage = Join-Path $Artifacts ('module-build\' + $module.Id)
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     $sources = @(Get-ChildItem -LiteralPath (Join-Path $root ('src\Modules\' + $module.Source)) -Filter '*.cs' | ForEach-Object FullName)
+    if ($module.Id -eq 'mini-icons') { $sources += (Join-Path $root 'src\Modules\TaskMenu\Topology.cs'),(Join-Path $root 'src\Modules\TaskMenu\DockPresentation.cs') }
     $sources += Join-Path $root 'src\Modules\ThemedSurface.cs'
     $manifest = Join-Path $root 'src\Modules\app.manifest'
-    & $compiler /nologo /utf8output /langversion:5 /target:winexe /optimize+ /platform:anycpu "/win32manifest:$manifest" "/out:$stage\$($module.Exe)" @refs @sources
+    & $compiler /nologo /utf8output /langversion:5 /target:winexe /optimize+ /platform:anycpu "/win32manifest:$manifest" ("/win32icon:"+(Join-Path $root ("assets\icons\"+$module.Id+".ico"))) "/out:$stage\$($module.Exe)" @refs @sources
     if ($LASTEXITCODE -ne 0) { throw "Module build failed: $($module.Id)" }
     Copy-Item -LiteralPath $shared -Destination $stage -Force
     $metadata = [ordered]@{ Id=$module.Id; Name=$module.Name; Description=$module.Description; Version=$version; Kind='process'; EntryPoint=$module.Exe; PackageUrl=''; Sha256=''; Preview=$module.Preview; MinHubVersion=$version; EnableArgument=''; DisableArgument=''; StatusArgument='' }

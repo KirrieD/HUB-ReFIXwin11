@@ -15,7 +15,7 @@ namespace ReFix.Hub {
   readonly List<string> sourceErrors=new List<string>();volatile string[] publishedSourceErrors=new string[0];
   public string DataRoot {get{return root;}}
   public IList<string> SourceErrors {get{return Array.AsReadOnly(publishedSourceErrors);}}
-  internal static bool ReservedSourceId(string id){return id=="quiet-mixer"||id=="quick-note"||id=="task-menu";}
+  internal static bool ReservedSourceId(string id){return id=="quiet-mixer"||id=="quick-note"||id=="task-menu"||id=="mini-icons";}
   bool Configured(ModuleManifest m){if(string.IsNullOrEmpty(m.SourceRepository)&&string.IsNullOrEmpty(m.SourceFolder))return true;var current=new SharedSourceStore(root).Read();return !string.IsNullOrEmpty(m.SourceRepository)&&string.IsNullOrEmpty(m.SourceFolder)&&current.Repositories.Any(r=>r.Repository==m.SourceRepository)||string.IsNullOrEmpty(m.SourceRepository)&&!string.IsNullOrEmpty(m.SourceFolder)&&current.Folders.Contains(m.SourceFolder,StringComparer.OrdinalIgnoreCase);}
   internal void EnsureInstallSource(ModuleManifest m){m.Validate();if(!Configured(m))throw new InvalidDataException("This module source is no longer configured.");}
   void LoadSources(bool network){
