@@ -18,6 +18,7 @@ namespace ReFix.TaskMenu
     {
         readonly Dispatcher dispatcher;readonly DispatcherTimer pending;readonly Native.WinEvent callback;readonly IntPtr hook;readonly HwndSource source;readonly uint taskbarCreated;bool disposed;
         internal List<MonitorInfo> Monitors=new List<MonitorInfo>();internal event EventHandler Changed;
+        internal HwndSource EventSource{get{return source;}}
         internal Topology(HwndSource source){this.source=source;dispatcher=source.Dispatcher;pending=new DispatcherTimer(TimeSpan.FromMilliseconds(180),DispatcherPriority.Background,delegate{pending.Stop();Refresh();},dispatcher);pending.Stop();taskbarCreated=Native.RegisterWindowMessage("TaskbarCreated");source.AddHook(Message);callback=OnWindowEvent;hook=Native.SetWinEventHook(0x8000,0x800B,IntPtr.Zero,callback,0,0,0);Refresh();}
         void OnWindowEvent(IntPtr h,uint ev,IntPtr window,int obj,int child,uint thread,uint time){if(disposed||window==IntPtr.Zero||obj!=0||child!=0)return;var name=new StringBuilder(128);Native.GetClassName(window,name,name.Capacity);if(name.ToString()=="Shell_TrayWnd"||name.ToString()=="Shell_SecondaryTrayWnd")dispatcher.BeginInvoke(new Action(Schedule));}
         internal void Schedule(){if(disposed)return;pending.Stop();pending.Start();}

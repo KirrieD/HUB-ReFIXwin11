@@ -33,14 +33,23 @@ namespace ReFix.Tests
                     var window=new BehaviorWindow(themes,controls,delegate{return startup;},delegate(bool value){startup=value;});
                     try
                     {
-                        window.Show();window.UpdateLayout();
+                        window.Show();window.UpdateLayout();ExpandAll(window);window.UpdateLayout();report("behavior has three collapsible application sections",CountSections(window)==3);
                         var check=Find(window,"Скрывать Микшер");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         report("behavior checkbox saves immediately",controls.Current.AutoHideMixer);
                         check=Find(window,"Автозапуск HUB");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         report("HUB startup uses isolated registration adapter",startup);
-                        report("behavior exposes exactly six choices",Count(window)==6);
+                        report("behavior retains six independent checkboxes",Count(window)==6);
+                        var partial=FindRadio(window,"Частично");partial.IsChecked=true;partial.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));report("menu layering choice saves immediately",controls.Current.TaskMenuLayer==TaskMenuLayer.ExceptFullscreen);
+                        var hide=FindRadio(window,"Убрать грани");hide.IsChecked=true;hide.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));report("edge visibility is independent from menu layering",!controls.Current.ShowTaskMenuEdges&&controls.Current.TaskMenuLayer==TaskMenuLayer.ExceptFullscreen);
+                        report("layer and edge choices are mutually exclusive",FindRadio(window,"Поверх всех окон (стандарт)").IsChecked==false&&FindRadio(window,"Ниже всех окон").IsChecked==false&&FindRadio(window,"Показать грани").IsChecked==false);
                     }
                     finally{window.Close();}
+                    var filtered=new BehaviorWindow(themes,controls,delegate{return false;},delegate{},id=>id=="task-menu");
+                    try{filtered.Show();filtered.UpdateLayout();var hub=Section(filtered,"Поведение HUB");var mixer=Section(filtered,"Поведение Микшера");var menu=Section(filtered,"Поведение Меню задач");
+                        report("behavior only shows installed extension sections",hub.Visibility==Visibility.Visible&&mixer.Visibility==Visibility.Collapsed&&menu.Visibility==Visibility.Visible);
+                        hub.IsExpanded=false;menu.IsExpanded=true;filtered.UpdateLayout();
+                        var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap((int)filtered.ActualWidth,(int)filtered.ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);bitmap.Render((System.Windows.Media.Visual)filtered.Content);var png=new System.Windows.Media.Imaging.PngBitmapEncoder();png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));using(var output=File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"behavior-menu-settings.png")))png.Save(output);
+                    }finally{filtered.Close();}
                 }
             }
             finally{if(Directory.Exists(root))Directory.Delete(root,true);}
@@ -66,6 +75,10 @@ namespace ReFix.Tests
 #if BEHAVIOR_STANDALONE
         [STAThread] public static int Main(){int failed=0;Run(delegate(string name,bool ok){Console.WriteLine((ok?"PASS ":"FAIL ")+name);if(!ok)failed++;});return failed==0?0:1;}
 #endif
+        static Expander Section(DependencyObject root,string title){var e=root as Expander;if(e!=null&&((TextBlock)e.Header).Text==title)return e;for(int i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);i++){var found=Section(System.Windows.Media.VisualTreeHelper.GetChild(root,i),title);if(found!=null)return found;}return null;}
+        static void ExpandAll(DependencyObject root){var e=root as Expander;if(e!=null){e.IsExpanded=true;e.UpdateLayout();}for(int i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);i++)ExpandAll(System.Windows.Media.VisualTreeHelper.GetChild(root,i));}
+        static int CountSections(DependencyObject root){int n=root is Expander?1:0;for(int i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);i++)n+=CountSections(System.Windows.Media.VisualTreeHelper.GetChild(root,i));return n;}
+        static RadioButton FindRadio(DependencyObject root,string text){var r=root as RadioButton;if(r!=null&&(string)r.Content==text)return r;for(int i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);i++){var found=FindRadio(System.Windows.Media.VisualTreeHelper.GetChild(root,i),text);if(found!=null)return found;}return null;}
         static CheckBox Find(DependencyObject root,string text){var c=root as CheckBox;if(c!=null&&(string)c.Content==text)return c;for(int i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);i++){var found=Find(System.Windows.Media.VisualTreeHelper.GetChild(root,i),text);if(found!=null)return found;}return null;}
         static int Count(DependencyObject root){int count=root is CheckBox?1:0;for(int i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);i++)count+=Count(System.Windows.Media.VisualTreeHelper.GetChild(root,i));return count;}
     }

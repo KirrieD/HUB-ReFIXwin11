@@ -40,6 +40,33 @@ namespace ReFix.Tests
         {
             var image=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);image.Render(window);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(image));using(var output=File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,name)))png.Save(output);
         }
+        static void LayerChecks(string root,ControlsStore controls,HwndSource source,MonitorInfo monitor)
+        {
+            var panel=new TaskMenuPanel{Monitor=monitor.Id,Edge=TaskMenuEdge.Right};var dock=new DockWindow(panel,monitor,new ThemeProfile{Mode="Custom"},controls,delegate{},delegate{},false,root);
+            var cover=new Window{Title="ReFix layer fixture",Width=500,Height=300,WindowStartupLocation=WindowStartupLocation.Manual,Left=monitor.Work.Left+40,Top=monitor.Work.Top+40};
+            dock.Show();cover.Show();Pump(60);IntPtr handle=new WindowInteropHelper(cover).Handle;
+            using(var environment=new DockEnvironment(source,controls,new[]{dock}))
+            {
+                var p=controls.Current;p.TaskMenuLayer=TaskMenuLayer.AboveAll;p.ShowTaskMenuEdges=true;controls.Save(p);dock.BehaviorChanged();environment.RefreshForWindow(handle);
+                Check("standard menu stays topmost and does not observe global mouse",DockPresentation.IsTopmost(dock.NativeHandle)&&!environment.RawEnabled);
+                p.TaskMenuLayer=TaskMenuLayer.BelowWindows;controls.Save(p);dock.BehaviorChanged();environment.RefreshForWindow(handle);
+                Check("below windows mode removes native topmost flag",!dock.Topmost&&!DockPresentation.IsTopmost(dock.NativeHandle)&&environment.RawEnabled);
+                var ordered=new System.Collections.Generic.List<IntPtr>();Native.EnumWindows(delegate(IntPtr h,IntPtr unused){ordered.Add(h);return true;},IntPtr.Zero);
+                Check("ordinary window appears before menu in native Z order",ordered.IndexOf(handle)>=0&&ordered.IndexOf(handle)<ordered.IndexOf(dock.NativeHandle));
+                p.TaskMenuLayer=TaskMenuLayer.ExceptFullscreen;controls.Save(p);dock.BehaviorChanged();environment.RefreshForWindow(handle);Check("partial mode remains topmost above ordinary windows",DockPresentation.IsTopmost(dock.NativeHandle));
+                IntPtr desktopHost=LayerNative.GetShellWindow();Check("desktop host is excluded from fullscreen application candidates",desktopHost==IntPtr.Zero||DockStacking.IsDesktop(desktopHost));
+                cover.WindowState=WindowState.Maximized;Pump(60);environment.RefreshForWindow(handle);Check("partial mode yields to maximized native window",!DockPresentation.IsTopmost(dock.NativeHandle));
+                cover.WindowState=WindowState.Normal;cover.WindowStyle=WindowStyle.None;cover.Left=monitor.Bounds.Left/monitor.Scale;cover.Top=monitor.Bounds.Top/monitor.Scale;cover.Width=monitor.Bounds.Width/monitor.Scale;cover.Height=monitor.Bounds.Height/monitor.Scale;Pump(60);environment.RefreshForWindow(handle);Check("partial mode yields to borderless monitor sized native window",!DockPresentation.IsTopmost(dock.NativeHandle));
+                Check("fullscreen application remains respected when focus moves to another monitor",environment.FullscreenOnMonitor(monitor.Bounds,new Rect(monitor.Bounds.Right+50,monitor.Bounds.Top,400,300),false));
+                p.TaskMenuLayer=TaskMenuLayer.AboveAll;p.ShowTaskMenuEdges=false;controls.Save(p);dock.BehaviorChanged();environment.RefreshForWindow(handle);dock.SetExpanded(false,true);
+                Check("hidden edges draw no pixels and retain raw mouse observation",dock.Opacity==0&&((Border)Field(dock,"edge")).Visibility!=Visibility.Visible&&environment.RawEnabled);
+                Rect full=(Rect)Field(dock,"full");environment.ObservePointer(new Point(full.Right-1,full.Top+full.Height/2));
+                Check("invisible edge opens menu over covering window",dock.IsExpanded&&dock.Opacity==1&&DockPresentation.IsTopmost(dock.NativeHandle));
+                p.ShowTaskMenuEdges=true;controls.Save(p);dock.BehaviorChanged();environment.RefreshForWindow(handle);dock.SetExpanded(false,true);
+                Check("restoring visible edges restores sliver and unregisters raw mouse",dock.Opacity==1&&((Border)Field(dock,"edge")).Visibility==Visibility.Visible&&!environment.RawEnabled);
+            }
+            dock.Shutdown();cover.Close();var defaults=controls.Current;defaults.TaskMenuLayer=TaskMenuLayer.AboveAll;defaults.ShowTaskMenuEdges=true;controls.Save(defaults);
+        }
         [STAThread] static int Main()
         {
             var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};string root=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"grid-ui-"+Guid.NewGuid().ToString("N"));
@@ -101,6 +128,7 @@ namespace ReFix.Tests
                 Check("bottom panel moves horizontally while remaining at bottom edge",bottomEnd.Left>bottomStart.Left&&bottomEnd.Bottom==bottomStart.Bottom&&bottomSaved==1);
                 double savedPosition=bottomPanel.Position;bottomDock.Shutdown();var reopened=new DockWindow(bottomPanel,monitor,new ThemeProfile{Mode="Custom"},controls,delegate{},delegate{},false,root);reopened.Show();Pump(50);reopened.SetExpanded(false,true);Native.RECT sliver;Native.GetWindowRect(new WindowInteropHelper(reopened).Handle,out sliver);
                 Check("reopened collapsed panel retains moved horizontal position",Math.Abs(sliver.Left-bottomEnd.Left)<=1&&bottomPanel.Position==savedPosition);reopened.Shutdown();
+                LayerChecks(root,controls,source,monitor);
                 foreach(TaskMenuEdge edge in Enum.GetValues(typeof(TaskMenuEdge)))if(!monitor.Forbidden.Contains(edge)){p.Edge=edge;break;}
                 var config=new TaskMenuConfig();config.Panels.Add(p);int saved=0;
                 var settings=new SettingsWindow(config,topology,new ThemeProfile{Mode="Custom"},delegate{saved++;});settings.Show();Pump(80);

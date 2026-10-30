@@ -23,7 +23,7 @@ namespace ReFix.TaskMenu
     }
     internal sealed class Controller : IDisposable
     {
-        readonly Application app;readonly ThemeStore themes;readonly ControlsStore controls;readonly Topology topology;readonly TaskMenuStore store;readonly TaskMenuConfig config;readonly List<DockWindow> docks=new List<DockWindow>();readonly System.Windows.Forms.NotifyIcon tray;SettingsWindow settings;bool disposed,rebuildPending;
+        readonly Application app;readonly ThemeStore themes;readonly ControlsStore controls;readonly Topology topology;readonly TaskMenuStore store;readonly TaskMenuConfig config;readonly List<DockWindow> docks=new List<DockWindow>();readonly DockEnvironment environment;readonly System.Windows.Forms.NotifyIcon tray;SettingsWindow settings;bool disposed,rebuildPending;
         internal bool Empty{get{return config.Panels.Count==0;}}
         internal Controller(Application app,ThemeStore themes,ControlsStore controls,Topology topology)
         {
@@ -31,16 +31,16 @@ namespace ReFix.TaskMenu
             try{if(new TaskMenuShortcuts(Paths.Root).Migrate(config))store.Save(config);}catch(Exception ex){if(!(ex is IOException||ex is UnauthorizedAccessException))throw;MessageBox.Show(ex.Message,"Не удалось сохранить копии ярлыков");}
             var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("Настроить панели…",null,delegate{app.Dispatcher.BeginInvoke(new Action(ShowSettings));});menu.Items.Add("Раскрыть / свернуть",null,delegate{app.Dispatcher.BeginInvoke(new Action(Toggle));});menu.Items.Add("Выключить меню задач",null,delegate{app.Dispatcher.BeginInvoke(new Action(app.Shutdown));});
             tray=new System.Windows.Forms.NotifyIcon{Text="ReFIX · Меню задач v"+ProductInfo.Version,Icon=System.Drawing.SystemIcons.Application,ContextMenuStrip=menu,Visible=true};tray.DoubleClick+=delegate{app.Dispatcher.BeginInvoke(new Action(ShowSettings));};
-            topology.Changed+=OnTopology;themes.Changed+=OnTheme;controls.Changed+=OnControls;Rebuild();
+            topology.Changed+=OnTopology;themes.Changed+=OnTheme;controls.Changed+=OnControls;environment=new DockEnvironment(topology.EventSource,controls,docks);Rebuild();
         }
         void OnTopology(object sender,EventArgs e){QueueRebuild();if(settings!=null){settings.Close();settings=null;ShowSettings();}}
         void OnTheme(object sender,EventArgs e){app.Dispatcher.BeginInvoke(new Action(delegate{if(disposed)return;foreach(var dock in docks)dock.ApplyTheme(themes.Current);if(settings!=null)settings.ApplyTheme(themes.Current);}));}
-        void OnControls(object sender,EventArgs e){app.Dispatcher.BeginInvoke(new Action(delegate{if(disposed)return;foreach(var dock in docks)dock.BehaviorChanged();}));}
+        void OnControls(object sender,EventArgs e){app.Dispatcher.BeginInvoke(new Action(delegate{if(disposed)return;foreach(var dock in docks)dock.BehaviorChanged();environment.Refresh();}));}
         internal void ShowSettings(){if(disposed)return;if(settings==null){settings=new SettingsWindow(config,topology,themes.Current,Save);settings.Closed+=delegate{settings=null;};}settings.Show();settings.Activate();}
         internal void Toggle(){bool open=false;foreach(var dock in docks)if(dock.IsExpanded)open=true;foreach(var dock in docks)dock.SetExpanded(!open);if(docks.Count==0)ShowSettings();}
         void Save(){try{store.Save(config);QueueRebuild();}catch(IOException ex){MessageBox.Show(ex.Message,"Не удалось сохранить меню задач");}catch(UnauthorizedAccessException ex){MessageBox.Show(ex.Message,"Не удалось сохранить меню задач");}}
         void QueueRebuild(){if(disposed||rebuildPending)return;rebuildPending=true;app.Dispatcher.BeginInvoke(new Action(delegate{rebuildPending=false;if(!disposed)Rebuild();}));}
-        void Rebuild(){var opened=new Dictionary<string,bool>();foreach(var dock in docks){opened[dock.PanelId]=dock.IsExpanded;dock.Shutdown();}docks.Clear();foreach(var panel in config.Panels){MonitorInfo found=null;foreach(var monitor in topology.Monitors)if(String.Equals(monitor.Id,panel.Monitor,StringComparison.OrdinalIgnoreCase)){found=monitor;break;}if(found==null||found.Forbidden.Contains(panel.Edge))continue;bool wasOpen;opened.TryGetValue(panel.Id,out wasOpen);var window=new DockWindow(panel,found,themes.Current,controls,Save,ShowSettings,wasOpen);docks.Add(window);window.Show();}}
-        public void Dispose(){if(disposed)return;disposed=true;topology.Changed-=OnTopology;themes.Changed-=OnTheme;controls.Changed-=OnControls;tray.Visible=false;tray.ContextMenuStrip.Dispose();tray.Dispose();if(settings!=null)settings.Close();foreach(var dock in docks)dock.Shutdown();docks.Clear();}
+        void Rebuild(){var opened=new Dictionary<string,bool>();foreach(var dock in docks){opened[dock.PanelId]=dock.IsExpanded;dock.Shutdown();}docks.Clear();foreach(var panel in config.Panels){MonitorInfo found=null;foreach(var monitor in topology.Monitors)if(String.Equals(monitor.Id,panel.Monitor,StringComparison.OrdinalIgnoreCase)){found=monitor;break;}if(found==null||found.Forbidden.Contains(panel.Edge))continue;bool wasOpen;opened.TryGetValue(panel.Id,out wasOpen);var window=new DockWindow(panel,found,themes.Current,controls,Save,ShowSettings,wasOpen);docks.Add(window);window.Show();}environment.Refresh();}
+        public void Dispose(){if(disposed)return;disposed=true;environment.Dispose();topology.Changed-=OnTopology;themes.Changed-=OnTheme;controls.Changed-=OnControls;tray.Visible=false;tray.ContextMenuStrip.Dispose();tray.Dispose();if(settings!=null)settings.Close();foreach(var dock in docks)dock.Shutdown();docks.Clear();}
     }
 }

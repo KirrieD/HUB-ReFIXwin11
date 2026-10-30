@@ -155,7 +155,7 @@ namespace ReFix.Hub
         }
         internal void OpenBehavior()
         {
-            if(behaviorEditor==null){behaviorEditor=new BehaviorWindow(themes,controls);behaviorEditor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(behaviorEditor);behaviorEditor.Closed+=delegate{behaviorEditor=null;};}
+            if(behaviorEditor==null){behaviorEditor=new BehaviorWindow(themes,controls,id=>manager.Modules.Any(m=>m.Manifest.Id==id&&!string.IsNullOrEmpty(m.InstalledVersion)));behaviorEditor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(behaviorEditor);behaviorEditor.Closed+=delegate{behaviorEditor=null;};}
             SettingsPlacement.Place(this,behaviorEditor);behaviorEditor.Show();behaviorEditor.Activate();
         }
         internal BehaviorWindow BehaviorEditor{get{return behaviorEditor;}}

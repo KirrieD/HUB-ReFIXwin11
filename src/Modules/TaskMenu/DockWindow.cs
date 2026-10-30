@@ -25,12 +25,15 @@ namespace ReFix.TaskMenu
         readonly Canvas board=new Canvas();readonly Border dropTarget=new Border{BorderThickness=new Thickness(2),IsHitTestVisible=false,Visibility=Visibility.Collapsed};
         bool dragging,dragHover,suppressLaunch,pendingChanged;Point press;Button pressed;string pressedPath;int previewColumns,previewRows;
         readonly TaskMenuShortcuts shortcuts;
+        bool layerTopmost=true,edgeHover;
+        internal IntPtr NativeHandle{get{return new WindowInteropHelper(this).Handle;}}
+        internal Rect MonitorBounds{get{return monitor.Bounds;}}
         internal string PanelId{get{return panel.Id;}}
         internal DockWindow(TaskMenuPanel panel,MonitorInfo monitor,ThemeProfile theme,ControlsStore controls,Action changed,Action settings,bool initiallyExpanded=false,string dataRoot=null)
         {
             this.panel=panel;this.monitor=monitor;this.controls=controls;this.changed=changed;this.settings=settings;this.theme=theme;this.initiallyExpanded=initiallyExpanded;shortcuts=new TaskMenuShortcuts(dataRoot??Paths.Root);
             ThemeControls.Install(this);
-            Title="Меню задач · "+panel.Edge;WindowStyle=WindowStyle.None;AllowsTransparency=true;ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;ShowActivated=false;Topmost=true;Background=Brushes.Transparent;Opacity=0;
+            Title="Меню задач · "+panel.Edge;WindowStyle=WindowStyle.None;AllowsTransparency=true;ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;ShowActivated=false;layerTopmost=controls.Current.TaskMenuLayer!=TaskMenuLayer.BelowWindows;Topmost=layerTopmost;Background=Brushes.Transparent;Opacity=0;
             TaskMenuGrid.Ensure(panel);viewport.Background=Brushes.Transparent;scroll=new ScrollViewer{VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,Margin=new Thickness(12),BorderThickness=new Thickness(0),Padding=new Thickness(0),Content=board,CanContentScroll=false};
             dropTarget.SetResourceReference(Border.BorderBrushProperty,"Hub.Accent");
             surface=new ThemedSurface(scroll);surface.Frame.Margin=new Thickness(0);surface.RenderTransform=slide;viewport.Children.Add(surface);edge.SetResourceReference(Border.BackgroundProperty,"Hub.Accent");viewport.Children.Add(edge);Content=viewport;
@@ -41,7 +44,7 @@ namespace ReFix.TaskMenu
             AllowDrop=true;DragEnter+=OnDragOver;DragOver+=OnDragOver;DragLeave+=delegate(object s,DragEventArgs e){if(!IsInside(e.GetPosition(this),ActualWidth,ActualHeight))EndHover();};Drop+=OnDrop;
             PreviewKeyDown+=delegate(object s,KeyEventArgs e){if(movingPanel&&e.Key==Key.Escape){panelGrip.CancelDrag();e.Handled=true;return;}if(KeyChord.Parse(controls.Current.Get("task-menu.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)){SetExpanded(false);e.Handled=true;}};
             SourceInitialized+=delegate{var handle=new WindowInteropHelper(this).Handle;DockPresentation.Apply(handle);var source=HwndSource.FromHwnd(handle);source.AddHook(delegate(IntPtr h,int msg,IntPtr w,IntPtr l,ref bool handled){if(msg==0x02E0)Dispatcher.BeginInvoke(new Action(delegate{if(!disposed){UpdateGeometry();SetExpanded(expanded,true);}}));return IntPtr.Zero;});};
-            Loaded+=delegate{DockPresentation.Apply(new WindowInteropHelper(this).Handle);UpdateGeometry();SetExpanded(initiallyExpanded||!controls.Current.AutoHideTaskMenu,true);Opacity=1;if(initiallyExpanded&&controls.Current.AutoHideTaskMenu)leave.Start();};ApplyTheme(theme);RenderItems();
+            Loaded+=delegate{DockPresentation.Apply(new WindowInteropHelper(this).Handle);UpdateGeometry();SetExpanded(initiallyExpanded||!controls.Current.AutoHideTaskMenu,true);DockStacking.Apply(NativeHandle,layerTopmost);if(initiallyExpanded&&controls.Current.AutoHideTaskMenu)leave.Start();};ApplyTheme(theme);RenderItems();
         }
         bool AnyMenuOpen(){if(ContextMenu!=null&&ContextMenu.IsOpen)return true;foreach(var item in board.Children){var b=item as Button;if(b!=null&&b.ContextMenu!=null&&b.ContextMenu.IsOpen)return true;}return false;}
         internal void ApplyTheme(ThemeProfile value){theme=value;surface.Apply(this,value);UpdateClip();}
@@ -49,8 +52,10 @@ namespace ReFix.TaskMenu
         void UpdateGeometry(){var source=PresentationSource.FromVisual(this);scale=source==null?monitor.Scale:source.CompositionTarget.TransformToDevice.M11;var extent=new TaskMenuPanel{Edge=panel.Edge,Position=panel.Position,Columns=Math.Max(panel.Columns,previewColumns),Rows=Math.Max(panel.Rows,previewRows),IconSize=panel.IconSize,GridConfigured=true};full=TaskMenuGeometry.Expanded(monitor.Bounds,monitor.Work,extent,scale);surface.Width=full.Width/scale;surface.Height=full.Height/scale;board.Width=extent.Columns*TaskMenuGrid.CellSize(panel);board.Height=extent.Rows*TaskMenuGrid.CellSize(panel);UpdateClip();}
         double HiddenOffset{get{return (panel.Edge==TaskMenuEdge.Left||panel.Edge==TaskMenuEdge.Top)?-(panel.Edge==TaskMenuEdge.Left?full.Width:full.Height)/scale+4:(panel.Edge==TaskMenuEdge.Right?full.Width:full.Height)/scale-4;}}
         bool Horizontal{get{return panel.Edge==TaskMenuEdge.Left||panel.Edge==TaskMenuEdge.Right;}}
-        void Position(Rect rect){Width=rect.Width/scale;Height=rect.Height/scale;Native.SetWindowPos(new WindowInteropHelper(this).Handle,new IntPtr(-1),(int)Math.Round(rect.X),(int)Math.Round(rect.Y),Math.Max(1,(int)Math.Round(rect.Width)),Math.Max(1,(int)Math.Round(rect.Height)),0x10|0x40);}
-        void EdgeOnly(bool only){edge.Visibility=only?Visibility.Visible:Visibility.Hidden;surface.Visibility=only?Visibility.Hidden:Visibility.Visible;panelGrip.Visibility=only?Visibility.Hidden:Visibility.Visible;}
+        void Position(Rect rect){Width=rect.Width/scale;Height=rect.Height/scale;Native.SetWindowPos(new WindowInteropHelper(this).Handle,layerTopmost?new IntPtr(-1):IntPtr.Zero,(int)Math.Round(rect.X),(int)Math.Round(rect.Y),Math.Max(1,(int)Math.Round(rect.Width)),Math.Max(1,(int)Math.Round(rect.Height)),0x10|0x40|(layerTopmost?0u:4u));}
+        void EdgeOnly(bool only){bool visible=controls.Current.ShowTaskMenuEdges;Opacity=only&&!visible?0:1;edge.Visibility=only&&visible?Visibility.Visible:Visibility.Hidden;surface.Visibility=only?Visibility.Hidden:Visibility.Visible;panelGrip.Visibility=only?Visibility.Hidden:Visibility.Visible;}
+        internal void ApplyLayer(bool fullscreen){if(disposed)return;layerTopmost=TaskMenuLayerPolicy.Topmost(controls.Current.TaskMenuLayer,fullscreen);if(Topmost!=layerTopmost)Topmost=layerTopmost;DockStacking.Apply(NativeHandle,layerTopmost);}
+        internal void ObservePointer(Point pointer){if(disposed)return;bool inside=TaskMenuGeometry.Sliver(full,panel.Edge,4*scale).Contains(pointer);if(inside&&!edgeHover){leave.Stop();SetExpanded(true);if(!IsMouseOver)leave.Start();}edgeHover=inside;}
         internal bool IsExpanded{get{return expanded;}}
         internal void SetExpanded(bool show){SetExpanded(show,false);}
         internal void SetExpanded(bool show,bool immediate)
@@ -62,7 +67,7 @@ namespace ReFix.TaskMenu
             if(immediate||!SystemParameters.ClientAreaAnimation||SystemParameters.HighContrast||Math.Abs(target-current)<1){complete();return;}
             animating=true;var animation=new DoubleAnimation(current,target,TimeSpan.FromMilliseconds(Math.Max(40,Math.Min(200,200*Math.Abs(target-current)/Math.Max(1,Math.Abs(HiddenOffset)))))){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut},FillBehavior=FillBehavior.Stop};animation.Completed+=delegate{complete();};slide.BeginAnimation(property,animation);
         }
-        internal void BehaviorChanged(){if(!controls.Current.AutoHideTaskMenu)SetExpanded(true);else if(!IsMouseOver){leave.Stop();leave.Start();}}
+        internal void BehaviorChanged(){edgeHover=false;EdgeOnly(!expanded&&!animating);if(!controls.Current.AutoHideTaskMenu)SetExpanded(true);else if(!IsMouseOver){leave.Stop();leave.Start();}}
         void RenderItems()
         {
             TaskMenuGrid.Ensure(panel);board.Children.Clear();double cell=TaskMenuGrid.CellSize(panel);

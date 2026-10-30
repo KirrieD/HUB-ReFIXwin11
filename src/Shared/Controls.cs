@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -34,10 +34,11 @@ namespace ReFix.Shared
     }
     public sealed class ControlsProfile
     {
+        public TaskMenuLayer TaskMenuLayer { get; set; } public bool ShowTaskMenuEdges { get; set; }
         public Dictionary<string,string> Bindings { get; set; } public bool StartMixerWithHub { get; set; } public bool AutoHideHub { get; set; } public bool AutoHideMixer { get; set; } public bool AutoHideTaskMenu { get; set; } public bool StartTaskMenuWithHub { get; set; }
-        public ControlsProfile() { AutoHideHub=true;AutoHideMixer=true;AutoHideTaskMenu=true;Bindings=new Dictionary<string,string>();foreach(var a in ControlActions.All)Bindings[a.Id]=a.DefaultGesture; }
+        public ControlsProfile() { ShowTaskMenuEdges=true;AutoHideHub=true;AutoHideMixer=true;AutoHideTaskMenu=true;Bindings=new Dictionary<string,string>();foreach(var a in ControlActions.All)Bindings[a.Id]=a.DefaultGesture; }
         public string Get(string id) { var a=ControlActions.Find(id);string v;return Bindings!=null&&Bindings.TryGetValue(id,out v)?v??"":a.DefaultGesture; }
-        public ControlsProfile Clone() { var p=new ControlsProfile();p.StartMixerWithHub=StartMixerWithHub;p.AutoHideHub=AutoHideHub;p.AutoHideMixer=AutoHideMixer;p.AutoHideTaskMenu=AutoHideTaskMenu;p.StartTaskMenuWithHub=StartTaskMenuWithHub;if(Bindings!=null)foreach(var b in Bindings)p.Bindings[b.Key]=b.Value;return p; }
+        public ControlsProfile Clone() { var p=new ControlsProfile();p.TaskMenuLayer=TaskMenuLayerPolicy.Normalize(TaskMenuLayer);p.ShowTaskMenuEdges=ShowTaskMenuEdges;p.StartMixerWithHub=StartMixerWithHub;p.AutoHideHub=AutoHideHub;p.AutoHideMixer=AutoHideMixer;p.AutoHideTaskMenu=AutoHideTaskMenu;p.StartTaskMenuWithHub=StartTaskMenuWithHub;if(Bindings!=null)foreach(var b in Bindings)p.Bindings[b.Key]=b.Value;return p; }
     }
     public sealed class KeyChord
     {
@@ -109,7 +110,7 @@ namespace ReFix.Shared
         public void Assign(string actionId,string gesture){ControlActions.Find(actionId);var p=Current;p.Bindings[actionId]=gesture;Save(p);}
         public void Save(ControlsProfile profile){if(profile==null)throw new ArgumentNullException("profile");var p=Validate(profile);lock(gate){if(disposed)throw new ObjectDisposedException("ControlsStore");foreach(var a in ControlActions.All)if(a.Scope=="global"&&p.Get(a.Id)!=""&&p.Get(a.Id)!=current.Get(a.Id))Probe(a.Id,p.Get(a.Id));WriteAtomic(file,p);current=p;}Raise(Changed);}
         void Probe(string action,string gesture){var live=GetRuntime(action);if(live!=null&&live.Actual==gesture)return;var c=KeyChord.Parse(gesture);Exception error=null;var t=new Thread(delegate(){if(!ControlsNative.RegisterHotKey(IntPtr.Zero,0x3FF0,c.Modifiers|0x4000,c.VirtualKey)){error=new InvalidOperationException("Shortcut is unavailable in Windows: "+gesture);return;}ControlsNative.UnregisterHotKey(IntPtr.Zero,0x3FF0);});t.Start();t.Join();if(error!=null)throw error;}
-        public void ResetDefaults(){var defaults=new ControlsProfile();var previous=Current;defaults.StartMixerWithHub=previous.StartMixerWithHub;defaults.AutoHideHub=previous.AutoHideHub;defaults.AutoHideMixer=previous.AutoHideMixer;defaults.AutoHideTaskMenu=previous.AutoHideTaskMenu;defaults.StartTaskMenuWithHub=previous.StartTaskMenuWithHub;Save(defaults);}
+        public void ResetDefaults(){var defaults=new ControlsProfile();var previous=Current;defaults.TaskMenuLayer=previous.TaskMenuLayer;defaults.ShowTaskMenuEdges=previous.ShowTaskMenuEdges;defaults.StartMixerWithHub=previous.StartMixerWithHub;defaults.AutoHideHub=previous.AutoHideHub;defaults.AutoHideMixer=previous.AutoHideMixer;defaults.AutoHideTaskMenu=previous.AutoHideTaskMenu;defaults.StartTaskMenuWithHub=previous.StartTaskMenuWithHub;Save(defaults);}
         internal static void WriteAtomic(string path,object value){string tmp=path+"."+Guid.NewGuid().ToString("N")+".tmp";try{File.WriteAllText(tmp,new JavaScriptSerializer().Serialize(value));if(File.Exists(path))File.Replace(tmp,path,null);else File.Move(tmp,path);}finally{if(File.Exists(tmp))File.Delete(tmp);}}
         internal string RuntimePath(string id,int pid,long ticks){return Path.Combine(runtime,id+"."+pid+"."+ticks+".json");}
         public HotkeyRuntimeStatus GetRuntime(string actionId){ControlActions.Find(actionId);HotkeyRuntimeStatus found=null;foreach(string path in Directory.GetFiles(runtime,actionId+".*.json")){var s=ReadJson<HotkeyRuntimeStatus>(path);if(s==null||s.ActionId!=actionId||!ControlsNative.Alive(s))continue;if(found==null||s.ProcessStartTicks>found.ProcessStartTicks)found=s;}return found;}

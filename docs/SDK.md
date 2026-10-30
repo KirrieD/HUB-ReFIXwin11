@@ -16,6 +16,8 @@ Build with C# 5 and the Windows .NET Framework 4.8 reference assemblies: System,
 
 ## Process control protocol 1
 
+`ControlsProfile.TaskMenuLayer` (`AboveAll`, `ExceptFullscreen`, `BelowWindows`) and `ShowTaskMenuEdges` persist menu stacking and collapsed-edge visibility independently of auto-hide. Legacy profiles default to AboveAll and visible edges. Clone, validation and keyboard reset retain these behavior preferences. TaskMenu observes WinEvents and registers mouse Raw Input on its own event HWND only when hidden/covered triggers need it; disposal removes registrations and hooks. Fullscreen policy uses physical monitor rectangles, including negative origins, and the front application on another monitor when focus changes. Desktop hosts and cloaked windows are excluded.
+
 `MixerLayoutProfile` и `MixerLayoutStore` хранят размеры микшера отдельно от общей темы в `mixer-layout.json`. Изменения распространяются через события и FileSystemWatcher; скрытое окно не запускает опрос аудио. Общая палитра, включая `Hub.Tertiary`, продолжает действовать при отдельной настройке геометрии микшера.
 
 Construct `ModuleRuntime(id, show, stop)` and call `Start()` after initializing the module. IDs match `[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}`. Callbacks run on the runtime worker thread; marshal UI operations to the Dispatcher. `stop` should request application shutdown; dispose the runtime during shutdown. All resources are event/blocking driven with no recurring idle work.

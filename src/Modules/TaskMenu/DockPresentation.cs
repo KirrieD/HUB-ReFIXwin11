@@ -13,6 +13,7 @@ namespace ReFix.TaskMenu
         [DllImport("user32.dll")]internal static extern bool GetWindowDisplayAffinity(IntPtr window,out uint affinity);
         [DllImport("dwmapi.dll")]internal static extern int DwmIsCompositionEnabled(out bool enabled);
         static long Style(IntPtr window){return IntPtr.Size==8?GetLong64(window,-20).ToInt64():GetLong32(window,-20);}
+        internal static bool IsTopmost(IntPtr window){return (Style(window)&8)!=0;}
         internal static bool IsToolWindow(IntPtr window){long style=Style(window);return (style&0x80)!=0&&(style&0x40000)==0;}
         internal static bool Apply(IntPtr window)
         {
