@@ -37,7 +37,7 @@ namespace ReFix.MiniIcons
         }
         IntPtr Message(IntPtr h,int msg,IntPtr w,IntPtr l,ref bool handled){if(msg==MiniTrayFiles.TransferMessage||msg==MiniTrayFiles.RestoreMessage){request(w,msg==MiniTrayFiles.RestoreMessage);handled=true;}return IntPtr.Zero;}
         internal void ApplyTheme(ThemeProfile value){surface.Apply(this,value);}
-        internal void Place(MonitorInfo monitor){Rect r=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,Math.Max(1,(int)r.Width),Math.Max(1,(int)r.Height),0x10|0x40);}
+        internal void Place(MonitorInfo monitor){Rect r=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,Math.Max(1,(int)r.Width),Math.Max(1,(int)r.Height),0x10);}
     }
     internal sealed class PopupWindow:Window
     {
