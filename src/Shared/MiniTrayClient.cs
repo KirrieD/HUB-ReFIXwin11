@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -111,7 +112,7 @@ namespace ReFix.Shared
         {
             MiniTrayHost host=MiniTrayFiles.ReadHost(root);if(host==null)return;
             long popupValue;IntPtr popup=IntPtr.Zero;if(Int64.TryParse(host.PopupWindowHandle,out popupValue)&&(IntPtr.Size==8||(popupValue>=Int32.MinValue&&popupValue<=Int32.MaxValue)))popup=new IntPtr(popupValue);
-            if(HitWindow(host,MiniTrayFiles.Handle(host),start,end,size)||HitWindow(host,popup,start,end,size))MiniTrayFiles.RequestTransfer(entry,host,false);
+            bool hit=HitWindow(host,MiniTrayFiles.Handle(host),start,end,size)||HitWindow(host,popup,start,end,size);if(!hit&&host.AdditionalWindowHandles!=null)foreach(var value in host.AdditionalWindowHandles.Take(128)){long handle;if(Int64.TryParse(value,out handle)&&(IntPtr.Size==8||(handle>=Int32.MinValue&&handle<=Int32.MaxValue))&&HitWindow(host,new IntPtr(handle),start,end,size)){hit=true;break;}}if(hit)MiniTrayFiles.RequestTransfer(entry,host,false);
         }
         public void Dispose()
         {

@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -24,7 +25,7 @@ namespace ReFix.Shared
     public sealed class MiniTrayHost : MiniTrayEntry
     {
         public List<string> HiddenIds {get;set;}
-        public string PopupWindowHandle {get;set;}
+        public string PopupWindowHandle {get;set;} public List<string> AdditionalWindowHandles {get;set;}
     }
     public static class MiniTrayFiles
     {
@@ -107,11 +108,11 @@ namespace ReFix.Shared
             foreach(string id in host.HiddenIds)if(!ValidId(id))return null;return host;
         }
         public static void WriteEntry(string root,MiniTrayEntry entry){if(!IsAlive(entry))throw new ArgumentException("Tray entry is not live");Write(EntryPath(root,entry.Id),entry);}
-        public static void PublishHost(string root,IntPtr hwnd,IEnumerable<string> hiddenIds,IntPtr popup=default(IntPtr))
+        public static void PublishHost(string root,IntPtr hwnd,IEnumerable<string> hiddenIds,IntPtr popup=default(IntPtr),IEnumerable<IntPtr> additional=null)
         {
             MiniTrayEntry identity=CreateEntry("mini-icons","Mini Icons","1",hwnd);var ids=new List<string>();
             if(hiddenIds!=null)foreach(string id in hiddenIds){if(!ValidId(id)||ids.Count>=256)throw new ArgumentException("Invalid hidden tray IDs");if(!ids.Contains(id))ids.Add(id);}
-            var host=new MiniTrayHost{SchemaVersion=1,Id=identity.Id,Name=identity.Name,Version=identity.Version,Pid=identity.Pid,StartedUtc=identity.StartedUtc,ExecutablePath=identity.ExecutablePath,WindowHandle=identity.WindowHandle,HiddenIds=ids,PopupWindowHandle=popup.ToInt64().ToString(CultureInfo.InvariantCulture)};
+            var host=new MiniTrayHost{SchemaVersion=1,Id=identity.Id,Name=identity.Name,Version=identity.Version,Pid=identity.Pid,StartedUtc=identity.StartedUtc,ExecutablePath=identity.ExecutablePath,WindowHandle=identity.WindowHandle,HiddenIds=ids,AdditionalWindowHandles=additional==null?new List<string>():additional.Take(128).Where(h=>WindowBelongsTo(h,identity.Pid)).Select(h=>h.ToInt64().ToString(CultureInfo.InvariantCulture)).ToList(),PopupWindowHandle=popup.ToInt64().ToString(CultureInfo.InvariantCulture)};
             if(!IsAlive(host))throw new ArgumentException("Tray host is not live");Write(HostPath(root),host);
         }
         static bool Own(MiniTrayEntry entry)

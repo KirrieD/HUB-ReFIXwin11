@@ -14,12 +14,13 @@ namespace ReFix.Shared
     public sealed class MiniIconsConfig
     {
         public int SchemaVersion{get;set;}public string Monitor{get;set;}public int IconSize{get;set;}public int Columns{get;set;}
-        public bool ShowWindowsTray{get;set;}
+        public bool ShowWindowsTray{get;set;} public List<string> Monitors{get;set;} public bool SharedAnimation{get;set;} public int AnimationMilliseconds{get;set;} public int OpenAnimationMilliseconds{get;set;} public int CloseAnimationMilliseconds{get;set;}
         public List<string> OwnTransfers{get;set;}public List<string> OwnOrder{get;set;}
-        public MiniIconsConfig(){SchemaVersion=2;Monitor="";IconSize=16;Columns=2;OwnTransfers=new List<string>{"hub","quiet-mixer","task-menu","quick-note"};OwnOrder=new List<string>(OwnTransfers);}
-        public void Normalize(){if(SchemaVersion<2&&IconSize==24&&Columns==5){IconSize=16;Columns=2;}SchemaVersion=2;Monitor=(Monitor??"").Substring(0,Math.Min(256,(Monitor??"").Length));IconSize=Math.Max(16,Math.Min(32,IconSize));Columns=Math.Max(1,Math.Min(8,Columns));OwnTransfers=Clean(OwnTransfers);OwnOrder=Clean(OwnOrder);}
+        public MiniIconsConfig(){SchemaVersion=2;Monitors=new List<string>();SharedAnimation=true;AnimationMilliseconds=OpenAnimationMilliseconds=CloseAnimationMilliseconds=600;Monitor="";IconSize=16;Columns=2;OwnTransfers=new List<string>{"hub","quiet-mixer","task-menu","quick-note"};OwnOrder=new List<string>(OwnTransfers);}
+        public void Normalize(){if(SchemaVersion<2&&IconSize==24&&Columns==5){IconSize=16;Columns=2;}Monitors=(Monitors??new List<string>()).Where(x=>!String.IsNullOrWhiteSpace(x)&&x.Length<=256).Distinct(StringComparer.OrdinalIgnoreCase).Take(64).ToList();AnimationMilliseconds=Duration(AnimationMilliseconds);OpenAnimationMilliseconds=Duration(OpenAnimationMilliseconds);CloseAnimationMilliseconds=Duration(CloseAnimationMilliseconds);SchemaVersion=2;Monitor=(Monitor??"").Substring(0,Math.Min(256,(Monitor??"").Length));IconSize=Math.Max(16,Math.Min(32,IconSize));Columns=Math.Max(1,Math.Min(8,Columns));OwnTransfers=Clean(OwnTransfers);OwnOrder=Clean(OwnOrder);}
+        static int Duration(int value){return value<=0?600:Math.Max(100,Math.Min(3000,value));}
         static List<string> Clean(IEnumerable<string> list){return (list??new string[0]).Where(MiniTrayFiles.ValidId).Distinct(StringComparer.Ordinal).Take(256).ToList();}
-        public MiniIconsConfig Clone(){var p=new MiniIconsConfig{Monitor=Monitor,IconSize=IconSize,Columns=Columns,ShowWindowsTray=ShowWindowsTray,OwnTransfers=OwnTransfers==null?null:new List<string>(OwnTransfers),OwnOrder=OwnOrder==null?null:new List<string>(OwnOrder)};p.Normalize();return p;}
+        public MiniIconsConfig Clone(){var p=new MiniIconsConfig{Monitors=Monitors==null?null:new List<string>(Monitors),SharedAnimation=SharedAnimation,AnimationMilliseconds=AnimationMilliseconds,OpenAnimationMilliseconds=OpenAnimationMilliseconds,CloseAnimationMilliseconds=CloseAnimationMilliseconds,Monitor=Monitor,IconSize=IconSize,Columns=Columns,ShowWindowsTray=ShowWindowsTray,OwnTransfers=OwnTransfers==null?null:new List<string>(OwnTransfers),OwnOrder=OwnOrder==null?null:new List<string>(OwnOrder)};p.Normalize();return p;}
     }
     public sealed class MiniIconsStore
     {

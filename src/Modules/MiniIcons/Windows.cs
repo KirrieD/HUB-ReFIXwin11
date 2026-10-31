@@ -38,7 +38,9 @@ namespace ReFix.MiniIcons
         }
         IntPtr Message(IntPtr h,int msg,IntPtr w,IntPtr l,ref bool handled){if(msg==MiniTrayFiles.TransferMessage||msg==MiniTrayFiles.RestoreMessage){request(w,msg==MiniTrayFiles.RestoreMessage);handled=true;}return IntPtr.Zero;}
         internal void ApplyTheme(ThemeProfile value){surface.Apply(this,value);}
-        internal void Place(MonitorInfo monitor){Rect r=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,Math.Max(1,(int)r.Width),Math.Max(1,(int)r.Height),0x10);}
+        double? alignedY;
+        internal void AlignToPopup(MonitorInfo monitor,Rect popup){alignedY=popup.Top+(popup.Height-40*monitor.Scale)/2;Place(monitor);}
+        internal void Place(MonitorInfo monitor){Rect r=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);if(alignedY.HasValue)r.Y=Math.Max(monitor.Work.Top,Math.Min(alignedY.Value,monitor.Work.Bottom-r.Height));Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,Math.Max(1,(int)r.Width),Math.Max(1,(int)r.Height),0x10);}
     }
     internal sealed class PopupWindow:Window
     {
@@ -46,7 +48,7 @@ namespace ReFix.MiniIcons
         readonly StackPanel body=new StackPanel();readonly UniformGrid icons=new UniformGrid();readonly ThemedSurface surface;readonly Action<string,bool> transfer;readonly Action<IList<string>> reorder;readonly Action settings;readonly Action openExternal;readonly Border separator;readonly Button external;
         MiniIconsConfig config;ThemeProfile theme;List<MiniTrayEntry> entries=new List<MiniTrayEntry>();bool dragging,suppressLaunch;Point pressedAt;MiniTrayEntry pressed;IList<string> pendingOrder;
         readonly TranslateTransform slide=new TranslateTransform();int motionRevision;
-        internal bool IsOpening{get;private set;}
+        internal bool IsOpening{get;private set;} internal bool IsClosing{get;private set;} TaskMenuEdge motionSide;
         [Serializable]sealed class IconDrag{internal string Id;internal IconDrag(string id){Id=id;}}
         internal IntPtr Handle{get{return new WindowInteropHelper(this).Handle;}}
         internal PopupWindow(ThemeProfile theme,Action<string,bool> transfer,Action<IList<string>> reorder,Action settings,Action openExternal)
@@ -58,7 +60,7 @@ namespace ReFix.MiniIcons
             external=IconButton(Visuals.Text("▦",16),24,"Скрытые значки Windows");external.HorizontalAlignment=HorizontalAlignment.Center;external.Click+=delegate{openExternal();};body.Children.Add(external);
             surface=new ThemedSurface(body);surface.Frame.Margin=new Thickness(6);surface.RenderTransform=slide;var viewport=new Grid{ClipToBounds=true};viewport.Children.Add(surface);Content=viewport;ApplyTheme(theme);
             var popupMenu=new ContextMenu();popupMenu.Items.Add(Visuals.Menu("Настройки",settings));ContextMenu=popupMenu;
-            Deactivated+=delegate{if(!dragging&&AutoHide&&!CaptureVisibility.IsCaptureActive&&(ContextMenu==null||!ContextMenu.IsOpen)&&!icons.Children.OfType<Button>().Any(b=>b.ContextMenu!=null&&b.ContextMenu.IsOpen))Hide();};PreviewKeyDown+=delegate(object sender,KeyEventArgs e){if(KeyChord.Parse(HideGesture).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)){Hide();e.Handled=true;}};
+            Deactivated+=delegate{if(!dragging&&AutoHide&&!CaptureVisibility.IsCaptureActive&&(ContextMenu==null||!ContextMenu.IsOpen)&&!icons.Children.OfType<Button>().Any(b=>b.ContextMenu!=null&&b.ContextMenu.IsOpen))HideAnimated();};PreviewKeyDown+=delegate(object sender,KeyEventArgs e){if(KeyChord.Parse(HideGesture).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)){HideAnimated();e.Handled=true;}};
             SourceInitialized+=delegate{DockPresentation.Apply(Handle);};
             IsVisibleChanged+=delegate{if(!IsVisible)ResetOpening();};Closed+=delegate{ResetOpening();};
         }
@@ -80,20 +82,26 @@ namespace ReFix.MiniIcons
             var button=new Button{Content=content,Width=size,Height=size,Padding=new Thickness(4),Background=Brushes.Transparent,BorderThickness=new Thickness(0),HorizontalContentAlignment=HorizontalAlignment.Center,VerticalContentAlignment=VerticalAlignment.Center,ToolTip=hint};
             button.MouseEnter+=delegate{button.SetResourceReference(Control.BackgroundProperty,"Hub.Surface");};button.MouseLeave+=delegate{button.Background=Brushes.Transparent;};return button;
         }
-        void Invoke(MiniTrayEntry entry,bool right,FrameworkElement source){Point p=source.PointToScreen(new Point(source.ActualWidth/2,source.ActualHeight));if(!MiniTrayFiles.Invoke(entry,right,(int)p.X,(int)p.Y))SetStatus("Приложение уже выключено. Откройте его через HUB.");else if(!right&&AutoHide)Hide();}
+        void Invoke(MiniTrayEntry entry,bool right,FrameworkElement source){Point p=source.PointToScreen(new Point(source.ActualWidth/2,source.ActualHeight));if(!MiniTrayFiles.Invoke(entry,right,(int)p.X,(int)p.Y))SetStatus("Приложение уже выключено. Откройте его через HUB.");else if(!right&&AutoHide)HideAnimated();}
         internal void SetStatus(string message){ToolTip=message;}
         internal void ApplyTheme(ThemeProfile value){theme=value;surface.Apply(this,value);}
         internal void AnimateOpen(MonitorInfo monitor)
         {
             ResetOpening();if(!SystemParameters.ClientAreaAnimation)return;
-            var side=MiniIconsGeometry.TaskbarSide(monitor.Bounds,monitor.Work);bool horizontal=side==TaskMenuEdge.Left||side==TaskMenuEdge.Right;double from=side==TaskMenuEdge.Left||side==TaskMenuEdge.Top?-24:24;
+            var side=MiniIconsGeometry.TaskbarSide(monitor.Bounds,monitor.Work);motionSide=side;bool horizontal=side==TaskMenuEdge.Left||side==TaskMenuEdge.Right;double from=side==TaskMenuEdge.Left||side==TaskMenuEdge.Top?-24:24;
             int revision=motionRevision;IsOpening=true;
-            var motion=new DoubleAnimation(from,0,TimeSpan.FromMilliseconds(180)){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut},FillBehavior=FillBehavior.Stop};
+            var motion=new DoubleAnimation(from,0,TimeSpan.FromMilliseconds(config==null?600:config.SharedAnimation?config.AnimationMilliseconds:config.OpenAnimationMilliseconds)){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut},FillBehavior=FillBehavior.Stop};
             motion.Completed+=delegate{if(revision==motionRevision)ResetOpening();};
             slide.BeginAnimation(horizontal?TranslateTransform.XProperty:TranslateTransform.YProperty,motion);
-            surface.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(0,1,TimeSpan.FromMilliseconds(140)){FillBehavior=FillBehavior.Stop});
+            surface.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(0,1,TimeSpan.FromMilliseconds(config==null?600:config.SharedAnimation?config.AnimationMilliseconds:config.OpenAnimationMilliseconds)){FillBehavior=FillBehavior.Stop});
         }
-        void ResetOpening(){motionRevision++;IsOpening=false;slide.BeginAnimation(TranslateTransform.XProperty,null);slide.BeginAnimation(TranslateTransform.YProperty,null);surface.BeginAnimation(UIElement.OpacityProperty,null);slide.X=slide.Y=0;surface.Opacity=1;}
-        internal void Place(MonitorInfo monitor,EdgeWindow edge){Native.RECT anchor;Native.GetWindowRect(edge.Handle,out anchor);double scale=Math.Max(.5,monitor.Scale);MaxHeight=Math.Max(1,monitor.Work.Height/scale);UpdateLayout();Rect r=MiniIconsGeometry.Popup(monitor.Bounds,monitor.Work,anchor.ToRect(),new Size(ActualWidth*scale,ActualHeight*scale),6*scale);Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,(int)r.Width,(int)r.Height,0x10|0x40);}
+        internal void HideAnimated()
+        {
+            if(!IsVisible||IsClosing)return;if(!SystemParameters.ClientAreaAnimation){Hide();return;}
+            double x=slide.X,y=slide.Y,opacity=surface.Opacity;ResetOpening();IsClosing=true;int revision=motionRevision;bool horizontal=motionSide==TaskMenuEdge.Left||motionSide==TaskMenuEdge.Right;double target=motionSide==TaskMenuEdge.Left||motionSide==TaskMenuEdge.Top?-24:24;int duration=config==null?600:config.SharedAnimation?config.AnimationMilliseconds:config.CloseAnimationMilliseconds;
+            var motion=new DoubleAnimation(horizontal?x:y,target,TimeSpan.FromMilliseconds(duration)){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseIn},FillBehavior=FillBehavior.HoldEnd};motion.Completed+=delegate{if(revision==motionRevision)Hide();};slide.BeginAnimation(horizontal?TranslateTransform.XProperty:TranslateTransform.YProperty,motion);surface.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(opacity,0,TimeSpan.FromMilliseconds(duration)));
+        }
+        void ResetOpening(){motionRevision++;IsOpening=false;IsClosing=false;slide.BeginAnimation(TranslateTransform.XProperty,null);slide.BeginAnimation(TranslateTransform.YProperty,null);surface.BeginAnimation(UIElement.OpacityProperty,null);slide.X=slide.Y=0;surface.Opacity=1;}
+        internal void Place(MonitorInfo monitor,EdgeWindow edge){Rect anchor=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);double scale=Math.Max(.5,monitor.Scale);MaxHeight=Math.Max(1,monitor.Work.Height/scale);UpdateLayout();Rect r=MiniIconsGeometry.Popup(monitor.Bounds,monitor.Work,anchor,new Size((ActualWidth>0?ActualWidth:Width)*scale,(IsVisible&&ActualHeight>0?ActualHeight:Math.Ceiling((double)Math.Max(1,entries.Count)/Math.Max(1,icons.Columns))*((config==null?16:config.IconSize)+8)+20+(config!=null&&config.ShowWindowsTray?33:0))*scale),6*scale);Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,(int)r.Width,(int)r.Height,0x10);edge.AlignToPopup(monitor,r);}
     }
 }
