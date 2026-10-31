@@ -39,6 +39,8 @@ if($Test -or $BuildTests){
     $mixerUi=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Modules\QuietMixer') -Filter '*.cs'|ForEach-Object FullName)
     $mixerUi+=(Join-Path $root 'src\Modules\ThemedSurface.cs'),(Join-Path $root 'tests\MixerLayoutUiTests.cs')
     Compile 'MixerLayout.Ui.Tests.exe' @($hub+$engine+$mixerUi) @('/target:exe','/define:MIXER_LAYOUT_UI_FIXTURE,MIXER_LAYOUT_EDITOR_UI_FIXTURE','/main:ReFix.Tests.MixerLayoutUiTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
+    Compile 'UpdateHosting.Tests.exe' @($hub+$engine+(Join-Path $root 'tests\UpdateHostingTests.cs')) @('/target:exe','/define:UPDATE_HOSTING_FIXTURE','/main:ReFix.Tests.UpdateHostingTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
+    Compile 'UpdateLazy.Tests.exe' @($hub+$engine+(Join-Path $root 'tests\UpdateLazyTests.cs')) @('/target:exe','/define:UPDATE_LAZY_FIXTURE','/main:ReFix.Tests.UpdateLazyTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
     Compile 'IconArtwork.Tests.exe' @((Join-Path $root 'tests\IconArtworkTests.cs'),(Join-Path $root 'tests\IconArtworkRunner.cs')) @('/target:exe','/define:ICON_ARTWORK_FIXTURE','/main:IconArtworkRunner',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
     Compile 'MiniIcons.External.Tests.exe' @((Join-Path $root 'src\Modules\MiniIcons\ExternalWindowsOverflow.cs'),(Join-Path $root 'tests\MiniIconsExternalTests.cs')) @('/target:exe','/define:MINI_ICONS_EXTERNAL_FIXTURE','/main:ReFix.Tests.MiniIconsExternalTests')
     Compile 'MiniTrayClient.Tests.exe' @((Join-Path $root 'tests\MiniTrayClientTests.cs')) @('/target:exe','/define:MINI_TRAY_CLIENT_FIXTURE','/main:ReFix.Tests.MiniTrayClientTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
@@ -48,7 +50,7 @@ if($Test -or $BuildTests){
     $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.cs'|ForEach-Object FullName)
     Compile 'ReFix.Tests.exe' @($hub+$tests+$engine+(Join-Path $root 'src\Bootstrap\BundleAudit.cs')+(Join-Path $root 'src\Bootstrap\InstallFileTransaction.cs')) @('/target:exe','/main:ReFix.Tests.Runner',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),$menuResource,$miniResource)
     if($Test){
-        foreach($fixture in @('IconArtwork.Tests.exe','MiniTrayClient.Tests.exe','MiniIcons.Ui.Tests.exe','MiniIcons.External.Tests.exe')) { & (Join-Path $out $fixture);if($LASTEXITCODE -ne 0){throw ('Fixture failed: '+$fixture)} }
+        foreach($fixture in @('UpdateLazy.Tests.exe','UpdateHosting.Tests.exe','IconArtwork.Tests.exe','MiniTrayClient.Tests.exe','MiniIcons.Ui.Tests.exe','MiniIcons.External.Tests.exe')) { & (Join-Path $out $fixture);if($LASTEXITCODE -ne 0){throw ('Fixture failed: '+$fixture)} }
         & (Join-Path $out 'ThemeLazy.Tests.exe')
         if($LASTEXITCODE -ne 0){throw 'Lazy theme startup test failed'}
         & (Join-Path $out 'TaskMenuGrid.Ui.Tests.exe')

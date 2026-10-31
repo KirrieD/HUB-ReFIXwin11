@@ -113,7 +113,7 @@ namespace ReFix.Hub
                 MiniTrayClient miniTray=null;
                 bool render=args.Length>=2 && args[0]=="--render";tray.Visible=!render;
                 if(!render)miniTray=new MiniTrayClient(Paths.Root,"hub","HUB ReFIX",ProductInfo.Version,tray,toggle,delegate(int x,int y){menu.Show(x,y);},themes);
-                updater=new UpdateCoordinator(Paths.Root,AppDomain.CurrentDomain.BaseDirectory,listener.Handle,report,delegate{Forms.Application.ExitThread();});
+                updater=new UpdateCoordinator(Paths.Root,AppDomain.CurrentDomain.BaseDirectory,listener.Handle,report,delegate{Forms.Application.ExitThread();},themes);
                 uint own=(uint)Process.GetCurrentProcess().Id;
                 Native.WinEventProc observer=delegate(IntPtr hook,uint evt,IntPtr target,int obj,int child,uint thread,uint time)
                 {

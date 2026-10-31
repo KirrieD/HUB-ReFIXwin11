@@ -37,6 +37,7 @@ namespace ReFix.Tests
             Group("keyboard controls",delegate{ControlsTests.Run(Report);});
             Group("legacy mixer migration",delegate{MigrationTests.Run(Report);});
             Group("bootstrap and setup",delegate{BootstrapTests.Run(Report);});
+            Group("themed update windows",delegate{UpdateWindowTests.Run(Report);});
             Group("verified self update",delegate{UpdateTests.Run(Report);});
             Group("backend",delegate{BackendTests.Run(Report);});
             Group("real module lifecycle",delegate{BackendTests.RunIntegration(Report);});
