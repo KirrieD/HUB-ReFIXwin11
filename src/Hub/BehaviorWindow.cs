@@ -12,8 +12,8 @@ namespace ReFix.Hub
         readonly Func<bool> readStartup;readonly Action<bool> writeStartup;readonly Func<string,bool> installed;
         readonly Border frame,image;readonly List<Action<ControlsProfile>> refreshers=new List<Action<ControlsProfile>>();readonly Dictionary<string,Expander> sections=new Dictionary<string,Expander>();
         readonly TextBlock notice=Ui.Text("Изменения сохраняются сразу.",12,"Hub.Muted");bool closed;
-        internal BehaviorWindow(ThemeStore themes,ControlsStore controls,Func<string,bool> installed=null):this(themes,controls,delegate{return Startup.Enabled;},delegate(bool enabled){Startup.Enabled=enabled;},installed){}
-        internal BehaviorWindow(ThemeStore themes,ControlsStore controls,Func<bool> readStartup,Action<bool> writeStartup,Func<string,bool> installed=null)
+        internal BehaviorWindow(ThemeStore themes,ControlsStore controls,Func<string,bool> installed=null,Func<System.Threading.Tasks.Task> openMiniSettings=null):this(themes,controls,delegate{return Startup.Enabled;},delegate(bool enabled){Startup.Enabled=enabled;},installed,openMiniSettings){}
+        internal BehaviorWindow(ThemeStore themes,ControlsStore controls,Func<bool> readStartup,Action<bool> writeStartup,Func<string,bool> installed=null,Func<System.Threading.Tasks.Task> openMiniSettings=null)
         {
             this.themes=themes;this.controls=controls;this.readStartup=readStartup;this.writeStartup=writeStartup;this.installed=installed??delegate{return true;};
             Title="HUB ReFIX — поведение";Width=590;Height=760;MinWidth=420;MinHeight=430;
@@ -47,6 +47,7 @@ namespace ReFix.Hub
             var mini=Section(content,"mini-icons","Поведение Мини значков",false);
             Add(mini,"Скрывать мини-меню",p=>p.AutoHideMiniIcons,(p,v)=>p.AutoHideMiniIcons=v);
             Add(mini,"Автозапуск Мини значки",p=>p.StartMiniIconsWithHub,(p,v)=>p.StartMiniIconsWithHub=v);
+            var miniSettings=Ui.Button("Открыть настройки",delegate{},false);miniSettings.Margin=new Thickness(0,14,0,0);miniSettings.IsEnabled=openMiniSettings!=null;mini.Children.Add(miniSettings);miniSettings.Click+=async delegate{miniSettings.IsEnabled=false;try{if(openMiniSettings!=null)await openMiniSettings();}catch(Exception ex){notice.Text="Не удалось открыть настройки: "+ex.Message;}finally{miniSettings.IsEnabled=openMiniSettings!=null;}};
             themes.Changed+=Changed;controls.Changed+=Changed;Activated+=delegate{Refresh();};
             Closed+=delegate{closed=true;themes.Changed-=Changed;controls.Changed-=Changed;};
             SizeChanged+=delegate{Ui.Apply(this,themes.Current,frame,image,true);};Refresh();

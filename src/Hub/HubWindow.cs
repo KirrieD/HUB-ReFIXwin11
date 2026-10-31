@@ -197,7 +197,7 @@ namespace ReFix.Hub
         }
         internal void OpenBehavior()
         {
-            if(behaviorEditor==null){behaviorEditor=new BehaviorWindow(themes,controls,id=>manager.Modules.Any(m=>m.Manifest.Id==id&&!string.IsNullOrEmpty(m.InstalledVersion)));behaviorEditor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(behaviorEditor);behaviorEditor.Closed+=delegate{behaviorEditor=null;};}
+            if(behaviorEditor==null){behaviorEditor=new BehaviorWindow(themes,controls,id=>manager.Modules.Any(m=>m.Manifest.Id==id&&!string.IsNullOrEmpty(m.InstalledVersion)),async delegate{var mini=manager.Modules.FirstOrDefault(m=>m.Manifest.Id=="mini-icons");if(mini==null||string.IsNullOrEmpty(mini.InstalledVersion))throw new InvalidOperationException("Сначала установите Мини значки.");await manager.RefreshStatesAsync();if(mini.State!="ON")await manager.StartAsync(mini);await manager.SettingsAsync(mini);});behaviorEditor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(behaviorEditor);behaviorEditor.Closed+=delegate{behaviorEditor=null;};}
             SettingsPlacement.Place(this,behaviorEditor);behaviorEditor.Show();behaviorEditor.Activate();
         }
         internal BehaviorWindow BehaviorEditor{get{return behaviorEditor;}}

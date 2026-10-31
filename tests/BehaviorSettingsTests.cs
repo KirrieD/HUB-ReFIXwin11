@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.IO;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -29,12 +30,12 @@ namespace ReFix.Tests
                     controls.ResetDefaults();
                     using(var reopened=new ControlsStore(root))report("behavior survives save clone and key reset",!reopened.Current.AutoHideMixer&&!reopened.Current.AutoHideTaskMenu&&reopened.Current.StartTaskMenuWithHub&&reopened.Current.StartMixerWithHub&&!reopened.Current.AutoHideHub);
                     report("task menu has distinct global and contextual shortcuts",controls.Current.Get("task-menu.toggle")=="Ctrl+Alt+M"&&controls.Current.Get("task-menu.hide")=="Esc");
-                    bool startup=false;
-                    var window=new BehaviorWindow(themes,controls,delegate{return startup;},delegate(bool value){startup=value;});
+                    bool startup=false,settingsOpened=false;
+                    var window=new BehaviorWindow(themes,controls,delegate{return startup;},delegate(bool value){startup=value;},null,delegate{settingsOpened=true;return Task.FromResult(0);});
                     try
                     {
                         window.Show();window.UpdateLayout();ExpandAll(window);window.UpdateLayout();report("behavior has four collapsible application sections",CountSections(window)==4);
-                        var check=Find(window,"Скрывать Микшер");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                        var sections=(Dictionary<string,Expander>)typeof(BehaviorWindow).GetField("sections",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(window);((StackPanel)sections["mini-icons"].Content).Children.OfType<Button>().Single(b=>Convert.ToString(b.Content)=="Открыть настройки").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));report("mini behavior settings button invokes dedicated settings action",settingsOpened);var check=Find(window,"Скрывать Микшер");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         report("behavior checkbox saves immediately",controls.Current.AutoHideMixer);
                         check=Find(window,"Автозапуск HUB");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         report("HUB startup uses isolated registration adapter",startup);
