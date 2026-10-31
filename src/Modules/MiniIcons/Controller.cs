@@ -31,7 +31,7 @@ namespace ReFix.MiniIcons
         internal void Toggle(){if(popup.IsVisible)popup.Hide();else ShowPopup();}
         void PopupVisibilityChanged(object sender,DependencyPropertyChangedEventArgs args){UpdateEdgeVisibility();}
         void UpdateEdgeVisibility(){if(disposed)return;if(monitor==null||popup.IsVisible)edge.Hide();else if(!edge.IsVisible)edge.Show();}
-        internal void ShowPopup(){if(disposed)return;RefreshEntries();popup.Show();popup.UpdateLayout();if(monitor!=null)popup.Place(monitor,edge);popup.Activate();}
+        internal void ShowPopup(){if(disposed)return;bool opening=!popup.IsVisible;RefreshEntries();popup.Show();popup.UpdateLayout();if(monitor!=null){popup.Place(monitor,edge);if(opening)popup.AnimateOpen(monitor);}popup.Activate();}
         internal void ShowSettings(){if(disposed)return;if(settings==null){settings=new SettingsWindow(config,topology,themes.Current,Save,OpenHub);settings.Closed+=delegate{settings=null;};}settings.Show();settings.Activate();}
         void OpenHub(){var hub=MiniTrayFiles.ReadEntries(Paths.Root).FirstOrDefault(e=>e.Id=="hub");if(hub==null||!MiniTrayFiles.Invoke(hub,false,0,0))MessageBox.Show("Откройте HUB и выберите Настройки → Оформление → Настройка Мини значков.","Мини значки");}
         void TransferWindow(IntPtr source,bool restore){var entry=MiniTrayFiles.ReadEntries(Paths.Root).FirstOrDefault(e=>MiniTrayFiles.Handle(e)==source);if(entry!=null)Transfer(entry.Id,restore);}
