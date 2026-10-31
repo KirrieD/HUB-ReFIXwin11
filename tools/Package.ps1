@@ -72,7 +72,7 @@ $releaseBase = 'https://github.com/KirrieD/HUB-ReFIXwin11/releases/download/v' +
     Sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     SetupUrl=$releaseBase + [IO.Path]::GetFileName($setup)
     SetupSha256=(Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-    Notes='HUB ReFIX ' + $version + ': Компактные мини значки: 16 px, без заголовка и лишних подписей. Интерфейсы доступны на снимках экрана; автоскрытие учитывает Ножницы Windows.'
+    Notes='HUB ReFIX ' + $version + ': Уменьшены внешние отступы и расстояние между мини значками. Сетка плотнее прилегает к значкам.'
 } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $Artifacts 'update.json') -Encoding UTF8
 Write-Output "Setup executable: $setup"
 Write-Output "Update metadata: $Artifacts\update.json"

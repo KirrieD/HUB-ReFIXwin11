@@ -49,10 +49,10 @@ namespace ReFix.MiniIcons
         internal PopupWindow(ThemeProfile theme,Action<string,bool> transfer,Action<IList<string>> reorder,Action settings,Action openExternal)
         {
             this.transfer=transfer;this.reorder=reorder;this.settings=settings;this.openExternal=openExternal;
-            Title="Мини значки";WindowStyle=WindowStyle.None;AllowsTransparency=true;ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;ShowActivated=true;Topmost=true;Background=Brushes.Transparent;Width=96;SizeToContent=SizeToContent.Height;
-            ThemeControls.Install(this);body.Margin=new Thickness(6);body.Children.Add(icons);
+            Title="Мини значки";WindowStyle=WindowStyle.None;AllowsTransparency=true;ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;ShowActivated=true;Topmost=true;Background=Brushes.Transparent;Width=68;SizeToContent=SizeToContent.Height;
+            ThemeControls.Install(this);body.Margin=new Thickness(4);body.Children.Add(icons);
             separator=new Border{Height=1,Margin=new Thickness(0,4,0,4)};separator.SetResourceReference(Border.BackgroundProperty,"Hub.Border");body.Children.Add(separator);
-            external=IconButton(Visuals.Text("▦",16),36,"Скрытые значки Windows");external.HorizontalAlignment=HorizontalAlignment.Center;external.Click+=delegate{openExternal();};body.Children.Add(external);
+            external=IconButton(Visuals.Text("▦",16),24,"Скрытые значки Windows");external.HorizontalAlignment=HorizontalAlignment.Center;external.Click+=delegate{openExternal();};body.Children.Add(external);
             surface=new ThemedSurface(body);surface.Frame.Margin=new Thickness(6);Content=surface;ApplyTheme(theme);
             var popupMenu=new ContextMenu();popupMenu.Items.Add(Visuals.Menu("Настройки",settings));ContextMenu=popupMenu;
             Deactivated+=delegate{if(!dragging&&AutoHide&&!CaptureVisibility.IsCaptureActive&&(ContextMenu==null||!ContextMenu.IsOpen)&&!icons.Children.OfType<Button>().Any(b=>b.ContextMenu!=null&&b.ContextMenu.IsOpen))Hide();};PreviewKeyDown+=delegate(object sender,KeyEventArgs e){if(KeyChord.Parse(HideGesture).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)){Hide();e.Handled=true;}};
@@ -63,17 +63,17 @@ namespace ReFix.MiniIcons
         {
             config=value.Clone();theme=appearance;entries=list.OrderBy(e=>{int index=config.OwnOrder.IndexOf(e.Id);return index<0?int.MaxValue:index;}).ThenBy(e=>e.Name).ToList();icons.Children.Clear();icons.Columns=Math.Max(1,Math.Min(config.Columns,entries.Count));
             separator.Visibility=external.Visibility=config.ShowWindowsTray?Visibility.Visible:Visibility.Collapsed;
-            foreach(var entry in entries){var item=entry;var button=IconButton(Visuals.Icon(entry.Id,config.IconSize,entry.IconTheme??theme),config.IconSize+20,entry.Name+" · v"+entry.Version);
+            foreach(var entry in entries){var item=entry;var button=IconButton(Visuals.Icon(entry.Id,config.IconSize,entry.IconTheme??theme),config.IconSize+8,entry.Name+" · v"+entry.Version);
                 button.Click+=delegate{if(!dragging&&!suppressLaunch)Invoke(item,false,button);};var menu=new ContextMenu();menu.Items.Add(Visuals.Menu("Открыть",delegate{Invoke(item,false,button);}));menu.Items.Add(Visuals.Menu("Меню приложения",delegate{Invoke(item,true,button);}));menu.Items.Add(new Separator());menu.Items.Add(Visuals.Menu("Вернуть в системный трей",delegate{transfer(item.Id,true);}));button.ContextMenu=menu;
                 button.PreviewMouseRightButtonUp+=delegate(object s,MouseButtonEventArgs e){if((Keyboard.Modifiers&ModifierKeys.Shift)==0){Invoke(item,true,button);e.Handled=true;}};
                 button.PreviewMouseLeftButtonDown+=delegate(object s,MouseButtonEventArgs e){suppressLaunch=false;pressed=item;pressedAt=e.GetPosition(this);};button.PreviewMouseMove+=delegate(object s,MouseEventArgs e){if(pressed!=item||dragging||e.LeftButton!=MouseButtonState.Pressed)return;Point p=e.GetPosition(this);if(Math.Abs(p.X-pressedAt.X)<SystemParameters.MinimumHorizontalDragDistance&&Math.Abs(p.Y-pressedAt.Y)<SystemParameters.MinimumVerticalDragDistance)return;pressed=null;dragging=true;suppressLaunch=true;try{DragDrop.DoDragDrop(button,new DataObject(DragFormat,new IconDrag(item.Id)),DragDropEffects.Move);}finally{dragging=false;if(pendingOrder!=null){var order=pendingOrder;pendingOrder=null;reorder(order);}}};button.PreviewMouseLeftButtonUp+=delegate{pressed=null;};
                 button.AllowDrop=true;button.DragOver+=delegate(object s,DragEventArgs e){e.Handled=true;var drag=e.Data.GetDataPresent(DragFormat)?e.Data.GetData(DragFormat) as IconDrag:null;e.Effects=drag!=null&&entries.Any(x=>x.Id==drag.Id)?DragDropEffects.Move:DragDropEffects.None;};button.Drop+=delegate(object s,DragEventArgs e){e.Handled=true;var drag=e.Data.GetDataPresent(DragFormat)?e.Data.GetData(DragFormat) as IconDrag:null;if(drag==null||drag.Id==item.Id||!entries.Any(x=>x.Id==drag.Id))return;var order=entries.Select(x=>x.Id).ToList();order.Remove(drag.Id);order.Insert(Math.Max(0,order.IndexOf(item.Id)),drag.Id);if(dragging)pendingOrder=order;else reorder(order);e.Effects=DragDropEffects.Move;};icons.Children.Add(button);
             }
-            Width=icons.Columns*(config.IconSize+20)+24;ToolTip=null;ApplyTheme(theme);
+            Width=icons.Columns*(config.IconSize+8)+20;ToolTip=null;ApplyTheme(theme);
         }
         static Button IconButton(object content,int size,string hint)
         {
-            var button=new Button{Content=content,Width=size,Height=size,Padding=new Thickness(6),Background=Brushes.Transparent,BorderThickness=new Thickness(0),HorizontalContentAlignment=HorizontalAlignment.Center,VerticalContentAlignment=VerticalAlignment.Center,ToolTip=hint};
+            var button=new Button{Content=content,Width=size,Height=size,Padding=new Thickness(4),Background=Brushes.Transparent,BorderThickness=new Thickness(0),HorizontalContentAlignment=HorizontalAlignment.Center,VerticalContentAlignment=VerticalAlignment.Center,ToolTip=hint};
             button.MouseEnter+=delegate{button.SetResourceReference(Control.BackgroundProperty,"Hub.Surface");};button.MouseLeave+=delegate{button.Background=Brushes.Transparent;};return button;
         }
         void Invoke(MiniTrayEntry entry,bool right,FrameworkElement source){Point p=source.PointToScreen(new Point(source.ActualWidth/2,source.ActualHeight));if(!MiniTrayFiles.Invoke(entry,right,(int)p.X,(int)p.Y))SetStatus("Приложение уже выключено. Откройте его через HUB.");else if(!right&&AutoHide)Hide();}
