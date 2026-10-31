@@ -32,6 +32,11 @@ namespace ReFix.Hub
         private BehaviorWindow behaviorEditor;
         private LinksWindow linksEditor;private MixerLayoutWindow mixerEditor;
         private bool exiting,refreshing;
+        private bool batchBusy;
+        private readonly HashSet<string> selected=new HashSet<string>(StringComparer.Ordinal);
+        private readonly CheckBox selectAll=SelectionUi.Create("Выбрать все инструменты текущего списка");
+        private readonly TextBlock selectionCount=Ui.Text("",12,"Hub.Muted");
+        private Button batchInstall,batchUpdate,batchRemove;
         private string filter="all";
         internal HubWindow(ThemeStore store,ModuleManager modules,ControlsStore bindings=null,Action checkUpdates=null)
         {
@@ -57,12 +62,18 @@ namespace ReFix.Hub
             Button settings=Ui.Button("Настройки",OpenSettings,false);settings.HorizontalContentAlignment=HorizontalAlignment.Center;nav.Children.Add(settings);
             Button refresh=Ui.Button("Обновить каталог",delegate { Run(RefreshCatalog); },false); refresh.Margin=new Thickness(0,8,0,0); nav.Children.Add(refresh);
             shortcut.Margin=new Thickness(2,14,0,0); nav.Children.Add(shortcut);RefreshControls();
-            Grid main=new Grid { Margin=new Thickness(12,18,22,0) }; main.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto }); main.RowDefinitions.Add(new RowDefinition { Height=new GridLength(32) }); main.RowDefinitions.Add(new RowDefinition()); Grid.SetRow(main,1); Grid.SetColumn(main,1); shell.Children.Add(main);
+            Grid main=new Grid { Margin=new Thickness(12,18,22,0) }; main.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto }); main.RowDefinitions.Add(new RowDefinition { Height=new GridLength(32) });main.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto}); main.RowDefinitions.Add(new RowDefinition()); Grid.SetRow(main,1); Grid.SetColumn(main,1); shell.Children.Add(main);
             DockPanel heading=new DockPanel { Margin=new Thickness(0,0,0,12) };
             search.HorizontalAlignment=HorizontalAlignment.Right; DockPanel.SetDock(search,Dock.Right); heading.Children.Add(search); heading.Children.Add(Ui.Text("Инструменты",25,"Hub.Foreground")); main.Children.Add(heading);
             System.Windows.Automation.AutomationProperties.SetName(search,"Поиск инструментов"); search.TextChanged+=delegate { Filter(); };
             Grid.SetRow(summary,1); main.Children.Add(summary);
-            ScrollViewer scroll=new ScrollViewer { Content=cards,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Padding=new Thickness(0,0,8,0) }; Grid.SetRow(scroll,2); main.Children.Add(scroll);
+            var bulk=new WrapPanel{Margin=new Thickness(0,0,0,12),VerticalAlignment=VerticalAlignment.Center};Grid.SetRow(bulk,2);main.Children.Add(bulk);
+            selectAll.Content="Все";selectAll.IsThreeState=true;selectAll.Margin=new Thickness(0,8,14,8);selectAll.ToolTip="Выбрать или снять выбор со всех инструментов текущего списка";bulk.Children.Add(selectAll);
+            selectAll.Click+=delegate{var visible=VisibleCards();bool choose=!visible.All(c=>selected.Contains(c.View.Manifest.Id));foreach(var card in visible){if(choose)selected.Add(card.View.Manifest.Id);else selected.Remove(card.View.Manifest.Id);card.IsSelected=choose;}RefreshBulk();};
+            batchInstall=Ui.Button("Установить",delegate{Run(()=>RunBatch(BulkOperation.Install));},false);batchUpdate=Ui.Button("Обновить",delegate{Run(()=>RunBatch(BulkOperation.Update));},true);batchRemove=Ui.Button("Удалить",delegate{Run(()=>RunBatch(BulkOperation.Remove));},false);
+            foreach(var button in new[]{batchInstall,batchUpdate,batchRemove}){button.Margin=new Thickness(0,0,8,0);bulk.Children.Add(button);}
+            selectionCount.VerticalAlignment=VerticalAlignment.Center;selectionCount.Margin=new Thickness(0,8,0,8);bulk.Children.Add(selectionCount);
+            ScrollViewer scroll=new ScrollViewer { Content=cards,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Padding=new Thickness(0,0,8,0) }; Grid.SetRow(scroll,3); main.Children.Add(scroll);
             Grid footer=new Grid { Margin=new Thickness(20,8,22,12) };footer.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});footer.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});Grid.SetRow(footer,2);Grid.SetColumnSpan(footer,2);shell.Children.Add(footer);
             DockPanel footerActions=new DockPanel();footer.Children.Add(footerActions);
             TextBlock repo=Ui.Text("v"+ProductInfo.Version+" · KirrieD / HUB-ReFIXwin11",11,"Hub.Muted");repo.VerticalAlignment=VerticalAlignment.Center;DockPanel.SetDock(repo,Dock.Right);footerActions.Children.Add(repo);
@@ -99,6 +110,7 @@ namespace ReFix.Hub
         }
         private async Task RefreshCatalog()
         {
+            if(batchBusy)return;
             SetNotice("Проверка каталога GitHub…");
             await manager.RefreshCatalogAsync(); Rebuild(); SetNotice("Каталог обновлён");
         }
@@ -119,10 +131,11 @@ namespace ReFix.Hub
         }
         private void Rebuild()
         {
+            selected.IntersectWith(manager.Modules.Select(v=>v.Manifest.Id));
             foreach(ModuleCard card in views) card.Dispose(); views.Clear(); cards.Children.Clear();
             foreach(ModuleView module in manager.Modules)
             {
-                ModuleCard card=new ModuleCard(module,manager,SetNotice,controls,themes.Root); views.Add(card); cards.Children.Add(card);
+                ModuleCard card=new ModuleCard(module,manager,SetNotice,controls,themes.Root,delegate(bool value){if(value)selected.Add(module.Manifest.Id);else selected.Remove(module.Manifest.Id);RefreshBulk();},RefreshBulk);card.IsSelected=selected.Contains(module.Manifest.Id); views.Add(card); cards.Children.Add(card);
             }
             if(views.Count==0) cards.Children.Add(Ui.Text("В каталоге пока нет инструментов. Обновите каталог или добавьте пакет в репозиторий.",15,"Hub.Muted"));
             foreach(ModuleCard card in views)card.ApplyPreview(themes.Current);
@@ -142,7 +155,36 @@ namespace ReFix.Hub
         private void Summary()
         {
             summary.Text=manager.Modules.Count+" в каталоге   /   "+manager.Modules.Count(v=>v.State=="ON")+" включено   /   "+manager.Modules.Count(v=>v.State=="NO")+" доступно для установки";
+            RefreshBulk();
         }
+        private List<ModuleCard> VisibleCards(){return views.Where(c=>c.Visibility==Visibility.Visible).ToList();}
+        private void RefreshBulk()
+        {
+            if(batchInstall==null)return;
+            var visible=VisibleCards();var chosen=visible.Where(c=>selected.Contains(c.View.Manifest.Id)).Select(c=>c.View).ToArray();
+            selectAll.IsChecked=BulkModuleActions.SelectionState(chosen.Length,visible.Count);selectAll.IsEnabled=!batchBusy&&visible.Count!=0;selectionCount.Text="Выбрано: "+chosen.Length;
+            bool ready=!batchBusy&&chosen.Length>0&&!chosen.Any(v=>v.IsBusy);
+            bool install=chosen.Any(v=>BulkModuleActions.Eligible(v,BulkOperation.Install));
+            batchInstall.Content=chosen.Length>0&&chosen.All(v=>!String.IsNullOrEmpty(v.InstalledVersion))?"Установлено":"Установить";
+            BulkButton(batchInstall,ready&&install,false);BulkButton(batchUpdate,ready&&chosen.Any(v=>BulkModuleActions.Eligible(v,BulkOperation.Update)),true);BulkButton(batchRemove,ready&&chosen.Any(v=>BulkModuleActions.Eligible(v,BulkOperation.Remove)),false);
+            cards.IsEnabled=!batchBusy;
+        }
+        private static void BulkButton(Button button,bool enabled,bool accent){button.IsEnabled=enabled;button.SetResourceReference(Control.BackgroundProperty,enabled&&accent?"Hub.Accent":"Hub.Surface");button.SetResourceReference(Control.ForegroundProperty,enabled?accent?"Hub.AccentText":"Hub.Foreground":"Hub.Muted");}
+        private async Task RunBatch(BulkOperation operation)
+        {
+            if(batchBusy)return;
+            var targets=VisibleCards().Where(c=>selected.Contains(c.View.Manifest.Id)).Select(c=>c.View).ToArray();if(targets.Any(v=>v.IsBusy))return;targets=targets.Where(v=>BulkModuleActions.Eligible(v,operation)).ToArray();if(targets.Length==0)return;
+            if(operation==BulkOperation.Remove&&MessageBox.Show(this,"Удалить выбранные утилиты ("+targets.Length+")?\n\n"+String.Join("\n",targets.Select(v=>"• "+v.Manifest.Name))+"\n\nРаботающие утилиты будут остановлены. Личные данные и оформление сохранятся.","Удаление утилит",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
+            batchBusy=true;RefreshBulk();
+            string title=operation==BulkOperation.Install?"Установка":operation==BulkOperation.Update?"Обновление":"Удаление";
+            try
+            {
+                var result=await BulkModuleActions.RunAsync(targets,operation,async delegate(ModuleView view){if(operation==BulkOperation.Install)await manager.InstallAsync(view);else if(operation==BulkOperation.Update)await manager.UpdateAsync(view);else{await manager.UninstallAsync(view);ClearStartup(controls,view.Manifest.Id);}},delegate(ModuleView view,int index,int count){SetNotice(title+" "+index+" из "+count+": "+view.Manifest.Name+"…");});
+                SetNotice(title+": выполнено "+result.Completed+" из "+targets.Length+(result.Errors.Count==0?".":". Ошибки: "+String.Join("; ",result.Errors)));
+            }
+            finally{batchBusy=false;Filter();}
+        }
+        internal static void ClearStartup(ControlsStore controls,string id){if(id!="quiet-mixer"&&id!="task-menu"&&id!="mini-icons")return;var p=controls.Current;if(id=="quiet-mixer")p.StartMixerWithHub=false;else if(id=="task-menu")p.StartTaskMenuWithHub=false;else p.StartMiniIconsWithHub=false;controls.Save(p);}
         internal void SetNotice(string text) { if(!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(delegate { SetNotice(text); })); return; } notice.Text=text; notice.ToolTip=text; }
         private void ThemeChanged(object sender,EventArgs e) { if(!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(delegate{ApplyTheme();if(!string.IsNullOrEmpty(themes.LastError))SetNotice("Не удалось сохранить оформление: "+themes.LastError);})); }
         private void ApplyTheme() { Ui.Apply(this,themes.Current,frame,image);foreach(ModuleCard card in views)card.ApplyPreview(themes.Current); }
@@ -218,15 +260,19 @@ namespace ReFix.Hub
         private readonly Button primary,open,update,remove,folder;
         private readonly TextBox installationPath;
         private readonly ModulePreview previewWindow;
-        internal ModuleCard(ModuleView module,ModuleManager service,Action<string> notice,ControlsStore bindings,string themeRoot=null)
+        private readonly CheckBox selection;
+        private readonly Action stateChanged;
+        internal bool IsSelected{get{return selection.IsChecked==true;}set{selection.IsChecked=value;}}
+        internal ModuleCard(ModuleView module,ModuleManager service,Action<string> notice,ControlsStore bindings,string themeRoot=null,Action<bool> selectionChanged=null,Action stateChanged=null)
         {
+            this.stateChanged=stateChanged;
             View=module; manager=service; notify=notice;
             controls=bindings;
             Padding=new Thickness(16); Margin=new Thickness(0,0,0,12); BorderThickness=new Thickness(1); CornerRadius=new CornerRadius(10);
             SetResourceReference(BackgroundProperty,"Hub.Surface"); SetResourceReference(BorderBrushProperty,"Hub.Border");
             Grid layout=new Grid(); layout.ColumnDefinitions.Add(new ColumnDefinition()); layout.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(236) }); Child=layout;
             StackPanel text=new StackPanel { Margin=new Thickness(0,0,16,0) }; layout.Children.Add(text);
-            DockPanel heading=new DockPanel(); state=Ui.Text("NO",12,"Hub.Muted"); state.FontWeight=FontWeights.Bold; state.Margin=new Thickness(12,3,0,0); DockPanel.SetDock(state,Dock.Right); heading.Children.Add(state); heading.Children.Add(Ui.Text(module.Manifest.Name,18,"Hub.Foreground")); text.Children.Add(heading);
+            DockPanel heading=new DockPanel();selection=SelectionUi.Create("Выбрать: "+module.Manifest.Name);selection.Margin=new Thickness(0,3,8,0);selection.Visibility=selectionChanged==null?Visibility.Collapsed:Visibility.Visible;selection.Click+=delegate{if(selectionChanged!=null)selectionChanged(selection.IsChecked==true);};DockPanel.SetDock(selection,Dock.Left);heading.Children.Add(selection); state=Ui.Text("NO",12,"Hub.Muted"); state.FontWeight=FontWeights.Bold; state.Margin=new Thickness(12,3,0,0); DockPanel.SetDock(state,Dock.Right); heading.Children.Add(state); heading.Children.Add(Ui.Text(module.Manifest.Name,18,"Hub.Foreground")); text.Children.Add(heading);
             version=Ui.Text("",12,"Hub.Foreground"); version.Margin=new Thickness(0,4,0,9); text.Children.Add(version);
             text.Children.Add(Ui.Text(module.Manifest.Description,12,"Hub.Muted"));
             details=Ui.Text("",11,"Hub.Muted"); details.Margin=new Thickness(0,7,0,0); text.Children.Add(details);
@@ -234,7 +280,7 @@ namespace ReFix.Hub
             WrapPanel actions=new WrapPanel { Margin=new Thickness(0,12,0,0) }; text.Children.Add(actions);
             primary=Ui.Button("Установить",delegate { InvokePrimary(); },true); actions.Children.Add(primary);
             open=Ui.Button("Открыть",delegate { Run(delegate { return manager.ShowAsync(View); }); },false); open.Margin=new Thickness(7,0,0,0); actions.Children.Add(open);
-            update=Ui.Button("Обновить",delegate { Run(async delegate { notify("Обновление «"+View.Manifest.Name+"»: загрузка и проверка пакета…");await manager.UpdateAsync(View);if(View.State=="ON"&&View.Manifest.Kind=="process")await manager.ShowAsync(View); }); },false); update.Margin=new Thickness(7,0,0,0); actions.Children.Add(update);
+            update=Ui.Button("Обновить",delegate { Run(async delegate { notify("Обновление «"+View.Manifest.Name+"»: загрузка и проверка пакета…");await manager.UpdateAsync(View); }); },false); update.Margin=new Thickness(7,0,0,0); actions.Children.Add(update);
             remove=Ui.Button("Удалить утилиту",Uninstall,false);remove.Margin=new Thickness(7,0,0,0);remove.ToolTip="Остановить утилиту и удалить её файлы. Личные данные сохраняются.";actions.Children.Add(remove);
             folder=Ui.Button("Открыть папку",delegate{try{Ui.OpenFolder(View.InstallDirectory);}catch(Exception ex){notify(ex.Message);}},false);folder.Margin=new Thickness(7,0,0,0);folder.ToolTip="Открыть папку установленной версии утилиты";actions.Children.Add(folder);
             StackPanel preview=new StackPanel { VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Right };
@@ -254,8 +300,9 @@ namespace ReFix.Hub
             primary.IsEnabled=!View.IsBusy; open.IsEnabled=!View.IsBusy;
             open.Visibility=View.State=="ON" && View.Manifest.Kind!="fix"?Visibility.Visible:Visibility.Collapsed;
             update.Visibility=!string.IsNullOrEmpty(View.InstalledVersion) && View.InstalledVersion!=View.Manifest.Version?Visibility.Visible:Visibility.Collapsed; update.IsEnabled=!View.IsBusy;
-            update.ToolTip=View.State=="ON"?"Скачать и проверить обновление, затем перезапустить и открыть утилиту с сохранением данных.":"Установить новую версию с сохранением личных данных";System.Windows.Controls.ToolTipService.SetShowOnDisabled(update,true);
+            update.ToolTip=View.State=="ON"?"Скачать и проверить обновление, затем перезапустить утилиту в фоне с сохранением данных.":"Установить новую версию с сохранением личных данных";System.Windows.Controls.ToolTipService.SetShowOnDisabled(update,true);
             remove.Visibility=string.IsNullOrEmpty(View.InstalledVersion)?Visibility.Collapsed:Visibility.Visible;remove.IsEnabled=!View.IsBusy;
+            selection.IsEnabled=!View.IsBusy;if(stateChanged!=null)stateChanged();
         }
         private void Uninstall()
         {
@@ -263,7 +310,7 @@ namespace ReFix.Hub
             string message="Удалить «"+View.Manifest.Name+"»? Работающая утилита будет остановлена. Личные данные и оформление сохранятся.";
             MessageBoxResult decision=owner==null?MessageBox.Show(message,"Удаление утилиты",MessageBoxButton.YesNo,MessageBoxImage.Question):MessageBox.Show(owner,message,"Удаление утилиты",MessageBoxButton.YesNo,MessageBoxImage.Question);
             if(decision!=MessageBoxResult.Yes)return;
-            Run(async delegate { await manager.UninstallAsync(View);if(View.Manifest.Id=="quiet-mixer"||View.Manifest.Id=="task-menu"||View.Manifest.Id=="mini-icons"){var p=controls.Current;if(View.Manifest.Id=="quiet-mixer")p.StartMixerWithHub=false;else if(View.Manifest.Id=="task-menu")p.StartTaskMenuWithHub=false;else p.StartMiniIconsWithHub=false;controls.Save(p);} });
+            Run(async delegate { await manager.UninstallAsync(View);HubWindow.ClearStartup(controls,View.Manifest.Id); });
         }
         private void InvokePrimary(){Run(async delegate
         {

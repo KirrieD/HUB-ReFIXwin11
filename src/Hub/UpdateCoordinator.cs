@@ -23,12 +23,13 @@ namespace ReFix.Hub
         private readonly Queue<Action> pending=new Queue<Action>();
         private readonly object gate=new object();
         private readonly ThemeStore themes;
+        private readonly Func<bool> hubVisible;
         private IUpdatePresentation presentation;
         private bool disposed,busy;
         private DateTime lastCheck=DateTime.MinValue;
-        internal UpdateCoordinator(string root,string directory,IntPtr hwnd,Action<string> notice,Action quit,ThemeStore themes)
+        internal UpdateCoordinator(string root,string directory,IntPtr hwnd,Action<string> notice,Action quit,ThemeStore themes,Func<bool> hubVisible=null)
         {
-            this.themes=themes;service=new HubUpdateService(root,directory);window=hwnd;report=notice;exit=quit;declinedPath=Path.Combine(root,"declined-update.txt");service.Progress+=Progress;
+            this.themes=themes;this.hubVisible=hubVisible;service=new HubUpdateService(root,directory);window=hwnd;report=notice;exit=quit;declinedPath=Path.Combine(root,"declined-update.txt");service.Progress+=Progress;
         }
         internal void Check(bool manual)
         {
@@ -64,7 +65,7 @@ namespace ReFix.Hub
                     PreparedHubUpdate prepared=await service.PrepareAsync(release);
                     Post(delegate
                     {
-                        try{service.StartApply(prepared);CloseProgress();report("Обновление устанавливается. HUB перезапускается…");exit();}
+                        try{service.StartApply(prepared,hubVisible==null?(bool?)null:!hubVisible());CloseProgress();report("Обновление устанавливается. HUB перезапускается…");exit();}
                         catch(Exception ex){CloseProgress();Finish();report("Обновление не установлено: "+HubUpdateService.FailureMessage(ex));}
                     });
                 }

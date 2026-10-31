@@ -33,6 +33,7 @@ namespace ReFix.Tests
             Group("HUB presentation and placement",delegate{HubPresentationTests.Run(Report);});
             Group("mixer layout settings",delegate{MixerLayoutTests.Run(Report);});
             Group("extension sources",delegate{ExtensionSourcesTests.Run(Report);});
+            Group("bulk module actions",delegate{BulkModuleTests.Run(Report);});
             Group("active module updates",delegate{ModuleUpdateTests.Run(Report);});
             Group("keyboard controls",delegate{ControlsTests.Run(Report);});
             Group("legacy mixer migration",delegate{MigrationTests.Run(Report);});

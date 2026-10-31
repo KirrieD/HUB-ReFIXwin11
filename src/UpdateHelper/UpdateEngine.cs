@@ -14,6 +14,7 @@ namespace ReFix.Updating {
  public sealed class UpdatePlan {
   public int SchemaVersion{get;set;} public string Target{get;set;} public string Work{get;set;} public string Stage{get;set;} public string ManifestHash{get;set;} public string Version{get;set;}
   public int ParentPid{get;set;} public long ParentStartedUtc{get;set;} public string ParentPath{get;set;}
+  public bool RestartInBackground{get;set;}
  }
  public static class UpdateEngine {
   public static readonly string[] Required={"HUB-ReFIX.exe","HUB-ReFIX.exe.config","HUB-ReFIX.Core.exe","HUB-ReFIX.Core.exe.config","ReFix.Shared.dll","ReFix.UpdateHelper.exe","catalog.json","README.md","tools/Install.ps1","tools/Install.cmd","tools/Uninstall.ps1","tools/Uninstall.cmd"};
@@ -57,6 +58,8 @@ namespace ReFix.Updating {
    var changed=new List<string>();try{int writes=0;foreach(string rel in touched){string dest=Inside(p.Target,rel);changed.Add(rel);if(rel=="installation.json"&&setupMarker!=null){setupMarker["Version"]=next.Version;File.WriteAllText(dest,Json().Serialize(setupMarker));}else if(incoming.Contains(rel)){Directory.CreateDirectory(Path.GetDirectoryName(dest));File.Copy(Inside(p.Stage,rel),dest,true);}else if(File.Exists(dest))File.Delete(dest);if(afterWrite!=null)afterWrite(++writes);}Manifest(p.Target,true);}
    catch(Exception failure){var errors=new List<Exception>();for(int i=changed.Count-1;i>=0;i--)try{string rel=changed[i],dest=Inside(p.Target,rel);if(existed.Contains(rel))File.Copy(Inside(backup,rel),dest,true);else if(File.Exists(dest))File.Delete(dest);}catch(Exception restore){errors.Add(restore);}if(errors.Count>0){errors.Insert(0,failure);throw new AggregateException("Update failed and rollback needs repair; backup retained at "+backup,errors);}throw;}
   }
-  public static void Restart(UpdatePlan p){string exe=Inside(p.Target,"HUB-ReFIX.exe");Process.Start(new ProcessStartInfo(exe){UseShellExecute=true,WorkingDirectory=p.Target});}
+  internal static void SaveRestartMode(UpdatePlan p,string path,bool? restartInBackground){ValidatePlan(p);if(!string.Equals(Full(path),Inside(p.Work,"plan.json"),StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Plan is outside work directory.");NoLinks(path);if(!restartInBackground.HasValue)return;p.RestartInBackground=restartInBackground.Value;File.WriteAllText(path,Json().Serialize(p),new System.Text.UTF8Encoding(false));}
+  internal static ProcessStartInfo RestartStartInfo(UpdatePlan p){string exe=Inside(p.Target,"HUB-ReFIX.exe");return new ProcessStartInfo(exe,p.RestartInBackground?"--background":""){UseShellExecute=true,WorkingDirectory=p.Target};}
+  public static void Restart(UpdatePlan p){Process.Start(RestartStartInfo(p));}
  }
 }
