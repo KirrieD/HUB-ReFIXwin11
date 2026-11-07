@@ -22,6 +22,7 @@ namespace ReFix.QuickNote
         readonly StackPanel notes = new StackPanel();
         readonly StackPanel content = new StackPanel();
         readonly Button toggle;
+        readonly StackPanel root;
         readonly TextBlock title;
         bool disposed;
 
@@ -32,9 +33,12 @@ namespace ReFix.QuickNote
             WindowStyle = WindowStyle.None; AllowsTransparency = true; ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false; ShowActivated = false; Background = Brushes.Transparent;
             ThemeControls.Install(this);
-            var root = new StackPanel { Margin = new Thickness(10), AllowDrop = true };
+            root = new StackPanel { Margin = new Thickness(10), AllowDrop = true };
             var header = new DockPanel { Background = Brushes.Transparent };
             toggle = NoteWindow.Button("", Toggle);
+            toggle.Margin = new Thickness(0);
+            toggle.Padding = new Thickness(5, 0, 5, 0);
+            toggle.MinWidth = 20;
             DockPanel.SetDock(toggle, Dock.Right);
             header.Children.Add(toggle);
             title = new TextBlock { FontSize = 15, Margin = new Thickness(6, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Cursor = Cursors.SizeAll };
@@ -95,7 +99,10 @@ namespace ReFix.QuickNote
             Title = list.Name + " · Быстрая заметка";
             toggle.Content = list.Collapsed ? "›" : "⌄";
             toggle.ToolTip = list.Collapsed ? "Раскрыть заметки" : "Свернуть список";
-            Width = list.Collapsed ? 188 : 280;
+            Width = list.Collapsed ? 119 : 280;
+            root.Margin = new Thickness(list.Collapsed ? 4 : 10);
+            title.FontSize = list.Collapsed ? 12 : 15;
+            title.ToolTip = list.Name + " · перетащить список";
             content.Visibility = list.Collapsed ? Visibility.Collapsed : Visibility.Visible;
             notes.Children.Clear();
             foreach (var note in library.Index.Notes.Where(n => n.ListId == list.Id))

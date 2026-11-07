@@ -61,6 +61,17 @@ namespace ReFix.Tests
                 var borders=Find<Border>(track.DecreaseRepeatButton);Check("mixer live track thickness applies",borders!=null&&borders.Height==6);
                 Screenshot(window,Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"mixer-custom.png"));
                 window.Hide();Check("mixer hide releases rows and stops refresh",!window.RefreshRunning&&window.RowCount==0&&!window.HasAudio);
+                control=controls.Current;control.AutoHideMixer=true;controls.Save(control);
+                var other=new Window{Width=160,Height=100};
+                other.Show();other.Activate();
+                window.ShowActivated=false;window.Show();Pump();
+                var positioning=typeof(MixerWindow).GetField("positioning",BindingFlags.Instance|BindingFlags.NonPublic);
+                positioning.SetValue(window,true);
+                typeof(MixerWindow).GetMethod("TryAutoHide",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(window,null);
+                Check("mixer defers hiding while it is being positioned",window.IsVisible&&(bool)Field(window,"hidePending"));
+                positioning.SetValue(window,false);
+                Check("mixer retries deferred hiding without a second deactivation",Wait(()=>!window.IsVisible)&&!window.RefreshRunning);
+                other.Close();
                 editor.ResetDefaults();Check("mixer hidden layout updates without opening audio",Wait(delegate{return window.Width==340&&window.FontSize==12;})&&!window.HasAudio&&!window.RefreshRunning);
                 window.Close();p=editor.Current;p.WindowWidth=410;editor.Save(p);Pump();Check("mixer ignores changes after close",window.Width==340);
                 channel.Dispose();

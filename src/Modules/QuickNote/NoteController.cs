@@ -4,6 +4,9 @@ using System.Linq;
 using System.Windows;
 using Microsoft.Win32;
 using ReFix.Shared;
+using ReFix.Modules;
+using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace ReFix.QuickNote
 {
@@ -120,12 +123,27 @@ namespace ReFix.QuickNote
             catch (Exception ex) { MessageBox.Show(ex.Message, "Быстрая заметка", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
 
-        static string Prompt(Window owner, string title, string value)
+        string Prompt(Window owner, string title, string value)
         {
             var field = new System.Windows.Controls.TextBox { Text = value, MaxLength = 80, Margin = new Thickness(0, 0, 0, 8) };
             var panel = new System.Windows.Controls.StackPanel { Margin = new Thickness(16) };
             panel.Children.Add(field);
-            var dialog = new Window { Owner = owner, Title = title, Width = 330, SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, Content = panel };
+            var dialog = new Window { Owner = owner, Title = title, Width = 330, SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false };
+            ThemeControls.Install(dialog);
+            field.SetResourceReference(Control.BackgroundProperty,"Hub.Surface");
+            field.SetResourceReference(Control.ForegroundProperty,"Hub.Foreground");
+            field.SetResourceReference(Control.BorderBrushProperty,"Hub.Border");
+            field.Padding = new Thickness(6);
+            var heading = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+            var close = NoteWindow.Button("×", dialog.Close);
+            close.IsCancel = true;
+            DockPanel.SetDock(close, Dock.Right);
+            heading.Children.Add(close);
+            heading.Children.Add(new TextBlock { Text = title, FontSize = 17, VerticalAlignment = VerticalAlignment.Center });
+            panel.Children.Insert(0, heading);
+            var surface = new ThemedSurface(panel);
+            dialog.Content = surface;
+            surface.Apply(dialog, themes.Current);
             var ok = NoteWindow.Button("Сохранить", delegate { if (!String.IsNullOrWhiteSpace(field.Text)) dialog.DialogResult = true; });
             ok.IsDefault = true;
             panel.Children.Add(ok);

@@ -67,12 +67,22 @@ internal static class ModuleThemeTests
                 var image=System.Windows.Media.Imaging.BitmapSource.Create(1,1,96,96,System.Windows.Media.PixelFormats.Bgra32,null,new byte[]{0,0,255,255},4);
                 text.CaretPosition=paragraph.ContentEnd;
                 typeof(NoteWindow).GetMethod("InsertImage",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(note,new object[]{new Image{Source=image}});
+                var ordered=new System.Windows.Documents.List { MarkerStyle=TextMarkerStyle.Decimal };
+                ordered.ListItems.Add(new ListItem(new Paragraph(new Run("Первый пункт"))));
+                var bullets=new System.Windows.Documents.List { MarkerStyle=TextMarkerStyle.Disc };
+                bullets.ListItems.Add(new ListItem(new Paragraph(new Run("Маркер"))));
+                text.Document.Blocks.Add(ordered);
+                text.Document.Blocks.Add(bullets);
+                var decorated=paragraph.Inlines.OfType<Run>().First();
+                decorated.TextDecorations=new TextDecorationCollection { System.Windows.TextDecorations.Underline[0], System.Windows.TextDecorations.Strikethrough[0] };
                 Require(note.Save(),"Note save failed");
                 using(var reopened=new NoteWindow(library,record,second,noteControls,null,null))
                 {
                     var restored=(Paragraph)Editor(reopened).Document.Blocks.FirstBlock;
                     Require(Plain(Editor(reopened)).StartsWith("Локальная заметка"),"Quick Note must restore saved text");
                     Require(restored.Inlines.OfType<Run>().Any(r=>r.FontSize==28&&((System.Windows.Media.SolidColorBrush)r.Foreground).Color==System.Windows.Media.Colors.Red&&((System.Windows.Media.SolidColorBrush)r.Background).Color==System.Windows.Media.Colors.Yellow),"Rich formatting must survive save and reopen");
+                    Require(Editor(reopened).Document.Blocks.OfType<System.Windows.Documents.List>().Select(l=>l.MarkerStyle).SequenceEqual(new[]{TextMarkerStyle.Decimal,TextMarkerStyle.Disc}),"Both list types must survive reopening");
+                    Require(restored.Inlines.OfType<Run>().Any(r=>r.TextDecorations.Count==2),"Strike and underline must survive together");
                     Require(restored.Inlines.OfType<InlineUIContainer>().Any(i=>i.Child is Image),"Image must survive save and reopen");
                 }
                 note.Dispose();
@@ -87,6 +97,20 @@ internal static class ModuleThemeTests
                     var windows=(System.Collections.Generic.Dictionary<string,NoteWindow>)typeof(NoteController).GetField("editors",fields).GetValue(controller);
                     var lists=(System.Collections.Generic.Dictionary<string,ListWindow>)typeof(NoteController).GetField("lists",fields).GetValue(controller);
                     Require(windows.Count==2&&windows.Values.All(w=>w.IsVisible)&&lists.Count==2,"Two notes and two lists must be independently visible");
+                    var editor=Editor(windows[record.Id]);
+                    windows[record.Id].UpdateLayout();
+                    var layer=(RoundedHighlights)((Grid)editor.Parent).Children[1];
+                    layer.InvalidateVisual();
+                    var rendered=new System.Windows.Media.Imaging.RenderTargetBitmap(690,565,96,96,System.Windows.Media.PixelFormats.Pbgra32);
+                    rendered.Render(windows[record.Id]);
+                    var drawing=System.Windows.Media.VisualTreeHelper.GetDrawing(layer);
+                    var firstRun=((Paragraph)editor.Document.Blocks.FirstBlock).Inlines.OfType<Run>().First();
+                    var start=firstRun.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                    Require(drawing!=null&&!drawing.Bounds.IsEmpty&&Math.Abs(drawing.Bounds.Left-start.Left)<2,"Rounded text highlight must align with the first glyph");
+                    Require(lists[other.Id].ActualWidth<150,"Collapsed list tab must be compact");
+                    var png=new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rendered));
+                    using(var file=File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"quick-note-preview.png"))) png.Save(file);
                     windows[record.Id].MinimizeNote();
                     Require(!windows[record.Id].IsVisible&&windows[secondRecord.Id].IsVisible&&lists[other.Id].IsVisible,"Minimizing a note restores its list and leaves other notes open");
                     var noteRows=(StackPanel)typeof(ListWindow).GetField("notes",fields).GetValue(lists[other.Id]);

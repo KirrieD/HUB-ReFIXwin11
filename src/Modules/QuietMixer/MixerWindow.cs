@@ -32,6 +32,8 @@ namespace QuietMixer
         private readonly bool ownsLayouts;
         private MixerLayoutProfile layout;
         private bool positioning;
+        private bool hidePending;
+        private IntPtr foregroundWhenInactive;
         private bool closing;
         internal bool RefreshRunning { get { return timer.IsEnabled; } }
         internal bool HasAudio { get { return audio != null; } }
@@ -72,12 +74,26 @@ namespace QuietMixer
             Grid.SetRow(status,2); root.Children.Add(status);
             surface=new ThemedSurface(root); Content=surface; surface.Apply(this,currentTheme);ApplyLayout(false);
             timer = new DispatcherTimer { Interval=TimeSpan.FromSeconds(1) };
-            timer.Tick += delegate { RefreshAudio(); };
-            IsVisibleChanged += delegate { if (IsVisible) { RefreshAudio(); timer.Start(); } else { timer.Stop(); ReleaseAudio(); } };
-            Deactivated += delegate { if (!closing && !positioning && this.controls.Current.AutoHideMixer && !CaptureVisibility.IsCaptureActive && !ContextMenuOpen()) Hide(); };
+            timer.Tick += delegate { if (hidePending || (foregroundWhenInactive != IntPtr.Zero && GetForegroundWindow() != foregroundWhenInactive)) TryAutoHide(); RefreshAudio(); };
+            IsVisibleChanged += delegate { if (IsVisible) { RefreshAudio(); timer.Start(); } else { hidePending=false; foregroundWhenInactive=IntPtr.Zero; timer.Stop(); ReleaseAudio(); } };
+            Activated += delegate { hidePending=false; foregroundWhenInactive=IntPtr.Zero; };
+            Deactivated += delegate { TryAutoHide(); };
             PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (KeyChord.Parse(this.controls.Current.Get("quiet-mixer.hide")).Matches(e.Key==Key.System?e.SystemKey:e.Key,Keyboard.Modifiers)) { Hide(); e.Handled=true; } };
             SourceInitialized += delegate { ApplyCorners(); };
             Closed += delegate { closing=true;this.layouts.Changed-=LayoutChanged;if(ownsLayouts)this.layouts.Dispose();this.controls.Changed-=controlsChanged;if(ownsControls)this.controls.Dispose();timer.Stop(); ReleaseAudio(); };
+        }
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+
+        private void TryAutoHide()
+        {
+            foregroundWhenInactive = IntPtr.Zero;
+            if (closing || !IsVisible || IsActive || !controls.Current.AutoHideMixer)
+            {
+                hidePending = false;
+                return;
+            }
+            hidePending = positioning || ContextMenuOpen() || CaptureVisibility.IsCaptureActive;
+            if (!hidePending) Hide();
         }
         private void UpdateControlsHelp() { if(closing)return;var p=controls.Current;string toggle=p.Get("quiet-mixer.toggle"),hide=p.Get("quiet-mixer.hide");status.Text="Устройство по умолчанию"+(toggle!=""?" · "+toggle:"")+(hide!=""?" · "+hide+" — скрыть":""); }
         private bool ContextMenuOpen()
@@ -170,7 +186,12 @@ namespace QuietMixer
             Point position=Policy.Place(work,Width*to.M11,Height*to.M22,new Point(cursor.X,cursor.Y));
             Show(); Native.SetWindowPos(handle,IntPtr.Zero,(int)position.X,(int)position.Y,0,0,0x15);
             ApplyCorners(); Native.SetForegroundWindow(handle); Activate();
-            Dispatcher.BeginInvoke(new Action(delegate { positioning=false; }), DispatcherPriority.ApplicationIdle);
+            Dispatcher.BeginInvoke(new Action(delegate
+            {
+                positioning=false;
+                if (hidePending) TryAutoHide();
+                else if (IsVisible && !IsActive) foregroundWhenInactive=GetForegroundWindow();
+            }), DispatcherPriority.ApplicationIdle);
         }
         private ContextMenu BuildMenu()
         {
@@ -180,7 +201,7 @@ namespace QuietMixer
             settings.Click+=delegate { System.Diagnostics.Process.Start("ms-settings:sound"); Hide(); }; c.Items.Add(settings);
             c.Items.Add(new Separator());
             MenuItem exit=new MenuItem { Header="Выйти из QuietMixer" }; exit.Click+=delegate { Application.Current.Shutdown(); }; c.Items.Add(exit);
-            c.Closed+=delegate { if (!IsActive && controls.Current.AutoHideMixer && !CaptureVisibility.IsCaptureActive) Hide(); }; return c;
+            c.Closed+=delegate { Dispatcher.BeginInvoke(new Action(TryAutoHide), DispatcherPriority.ApplicationIdle); }; return c;
         }
         private void ReleaseAudio()
         {

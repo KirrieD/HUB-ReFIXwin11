@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -55,15 +56,20 @@ namespace ReFix.QuickNote
 
             var tools = new WrapPanel { Margin = new Thickness(0, 5, 0, 5) };
             var styles = new ComboBox { MinWidth = 130, Margin = new Thickness(0, 2, 6, 2), ToolTip = "Стиль абзаца" };
+            styles.Items.Add(new ComboBoxItem { Content = "Стиль абзаца", IsEnabled = false });
             styles.Items.Add("Обычный текст");
             for (int i = 1; i <= 3; i++) styles.Items.Add("Заголовок " + i);
             for (int i = 1; i <= 3; i++) styles.Items.Add("Подзаголовок " + i);
-            styles.SelectionChanged += delegate { if (styles.SelectedIndex >= 0) { ApplyStyle(styles.SelectedIndex); styles.SelectedIndex = -1; } };
+            styles.SelectedIndex = 0;
+            styles.SelectionChanged += delegate { if (styles.SelectedIndex > 0) { ApplyStyle(styles.SelectedIndex - 1); styles.SelectedIndex = 0; } };
             styles.IsEditable = false;
             tools.Children.Add(styles);
-            tools.Children.Add(Button("Обычный текст", () => ApplyStyle(0)));
-            tools.Children.Add(Button("Жирный", () => EditingCommands.ToggleBold.Execute(null, editor)));
-            tools.Children.Add(Button("Курсив", () => EditingCommands.ToggleItalic.Execute(null, editor)));
+            tools.Children.Add(FormatButton("B", "Жирный", () => EditingCommands.ToggleBold.Execute(null, editor), FontWeights.Bold, FontStyles.Normal, null));
+            tools.Children.Add(FormatButton("I", "Курсив", () => EditingCommands.ToggleItalic.Execute(null, editor), FontWeights.Normal, FontStyles.Italic, null));
+            tools.Children.Add(FormatButton("S", "Зачёркивание", () => ToggleDecoration(TextDecorationLocation.Strikethrough, TextDecorations.Strikethrough[0]), FontWeights.Normal, FontStyles.Normal, TextDecorations.Strikethrough));
+            tools.Children.Add(FormatButton("P", "Подчёркивание", () => ToggleDecoration(TextDecorationLocation.Underline, TextDecorations.Underline[0]), FontWeights.Normal, FontStyles.Normal, TextDecorations.Underline));
+            tools.Children.Add(FormatButton("• ≡", "Маркированный список", () => EditingCommands.ToggleBullets.Execute(null, editor), FontWeights.Normal, FontStyles.Normal, null));
+            tools.Children.Add(FormatButton("1. ≡", "Нумерованный список", () => EditingCommands.ToggleNumbering.Execute(null, editor), FontWeights.Normal, FontStyles.Normal, null));
             Button textColor = null, background = null;
             textColor = Button("Цвет текста", () => Palette(textColor, TextElement.ForegroundProperty));
             background = Button("Цвет фона", () => Palette(background, TextElement.BackgroundProperty));
@@ -81,12 +87,18 @@ namespace ReFix.QuickNote
             editor.AcceptsTab = true;
             editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             editor.Padding = new Thickness(12);
-            editor.SetResourceReference(Control.BackgroundProperty, "Hub.Surface");
+            editor.Background = Brushes.Transparent;
             editor.SetResourceReference(Control.ForegroundProperty, "Hub.Foreground");
             editor.SetResourceReference(Control.BorderBrushProperty, "Hub.Border");
             editor.Document.FontSize = 15;
             library.LoadBody(note, editor.Document);
-            root.Children.Add(editor);
+            var page = new Grid { ClipToBounds = true };
+            page.SetResourceReference(Panel.BackgroundProperty, "Hub.Surface");
+            page.Children.Add(editor);
+            var highlights = new RoundedHighlights(editor);
+            Panel.SetZIndex(highlights, -1);
+            page.Children.Add(highlights);
+            root.Children.Add(page);
             surface = new ThemedSurface(root);
             Content = surface;
             ApplyTheme(theme);
@@ -122,6 +134,49 @@ namespace ReFix.QuickNote
             return button;
         }
 
+        Button FormatButton(string label, string description, Action apply, FontWeight weight, FontStyle style, TextDecorationCollection decorations)
+        {
+            var button = Button("", delegate { editor.Focus(); apply(); });
+            button.Content = new TextBlock { Text = label, FontSize = 15, FontWeight = weight, FontStyle = style, TextDecorations = decorations };
+            button.ToolTip = description;
+            button.Focusable = false;
+            System.Windows.Automation.AutomationProperties.SetName(button, description);
+            return button;
+        }
+
+        void ToggleDecoration(TextDecorationLocation location, TextDecoration decoration)
+        {
+            var selection = editor.Selection;
+            var old = selection.GetPropertyValue(Inline.TextDecorationsProperty) as TextDecorationCollection;
+            bool remove = old != null && old.Any(d => d.Location == location);
+            if (selection.IsEmpty)
+            {
+                selection.ApplyPropertyValue(Inline.TextDecorationsProperty, ChangeDecoration(old, location, decoration, remove));
+                return;
+            }
+            var start = selection.Start;
+            var end = selection.End;
+            var parts = NoteDocument.Paragraphs(editor.Document.Blocks).SelectMany(p => NoteDocument.Runs(p.Inlines))
+                .Where(r => r.ContentStart.CompareTo(end) < 0 && r.ContentEnd.CompareTo(start) > 0)
+                .Select(r => new
+                {
+                    Start = r.ContentStart.CompareTo(start) < 0 ? start : r.ContentStart,
+                    End = r.ContentEnd.CompareTo(end) > 0 ? end : r.ContentEnd,
+                    Value = ChangeDecoration(r.TextDecorations, location, decoration, remove)
+                }).ToArray();
+            editor.BeginChange();
+            try { foreach (var part in parts) new TextRange(part.Start, part.End).ApplyPropertyValue(Inline.TextDecorationsProperty, part.Value); }
+            finally { editor.EndChange(); }
+        }
+
+        static TextDecorationCollection ChangeDecoration(TextDecorationCollection old, TextDecorationLocation location, TextDecoration decoration, bool remove)
+        {
+            var result = new TextDecorationCollection();
+            if (old != null) foreach (var item in old) if (item.Location != location) result.Add(item);
+            if (!remove) result.Add(decoration);
+            return result;
+        }
+
         static TextBox Field(string value, int limit)
         {
             var field = new TextBox { Text = value ?? "", MaxLength = limit, Padding = new Thickness(5) };
@@ -148,7 +203,7 @@ namespace ReFix.QuickNote
             var first = selection.Start.Paragraph;
             double[] sizes = { 15, 29, 24, 21, 19, 17, 16 };
             var last = (selection.IsEmpty ? selection.End : selection.End.GetInsertionPosition(LogicalDirection.Backward)).Paragraph;
-            for (var paragraph = first; paragraph != null; paragraph = paragraph.NextBlock as Paragraph)
+            foreach (var paragraph in NoteDocument.Paragraphs(editor.Document.Blocks).SkipWhile(p => p != first))
             {
                 new TextRange(paragraph.ContentStart, paragraph.ContentEnd).ApplyPropertyValue(TextElement.FontSizeProperty, sizes[style]);
                 new TextRange(paragraph.ContentStart, paragraph.ContentEnd).ApplyPropertyValue(TextElement.FontWeightProperty, style == 0 ? FontWeights.Normal : FontWeights.SemiBold);
@@ -237,8 +292,9 @@ namespace ReFix.QuickNote
         void ApplyColor(TextRange range, DependencyProperty property, string hex)
         {
             editor.Focus();
-            if (range.IsEmpty) editor.Selection.ApplyPropertyValue(property, BrushFor(hex));
-            else range.ApplyPropertyValue(property, BrushFor(hex));
+            var brush = property == TextElement.BackgroundProperty ? NoteDocument.Highlight((Color)ColorConverter.ConvertFromString(hex)) : BrushFor(hex);
+            if (range.IsEmpty) editor.Selection.ApplyPropertyValue(property, brush);
+            else range.ApplyPropertyValue(property, brush);
             bodyDirty = true;
             QueueSave();
         }
