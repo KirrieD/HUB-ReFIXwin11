@@ -3,7 +3,7 @@
 The bundled catalogue contains two local process modules, not remote downloads:
 
 - quiet-mixer: a copied QuietMixer adapted to the shared theme and control SDK.
-- quick-note: a local text note saved under Paths.Root/notes/quick-note.txt.
+- quick-note: a local note library under Paths.Root/notes. The library index stores list assignments, positions and recent colors. Each note has its own formatted document file. The legacy quick-note.txt is imported without deleting it.
 
 Build the shared SDK first, then run:
 

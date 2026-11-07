@@ -9,12 +9,12 @@ $wpf = Join-Path $framework 'WPF'
 $shared = Join-Path $Artifacts 'ReFix.Shared.dll'
 if (!(Test-Path -LiteralPath $shared)) { throw "Build shared SDK first: $shared" }
 $refs = @('WindowsBase','PresentationCore','PresentationFramework','UIAutomationClient','UIAutomationTypes') | ForEach-Object { '/reference:' + (Join-Path $wpf ($_ + '.dll')) }
-$refs += '/reference:System.dll','/reference:System.Core.dll','/reference:System.Xaml.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll',"/reference:$shared"
+$refs += '/reference:System.dll','/reference:System.Core.dll','/reference:System.Xaml.dll','/reference:System.Web.Extensions.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll',"/reference:$shared"
 $packages = Join-Path $Artifacts 'packages'
 New-Item -ItemType Directory -Path $packages -Force | Out-Null
 $modules = @(
     @{ Id='quiet-mixer'; Name='Микшер громкости'; Description='Громкость устройства и приложений, настраиваемая горячая клавиша.'; Source='QuietMixer'; Exe='QuietMixer.exe'; Preview='mixer' },
-    @{ Id='quick-note'; Name='Быстрая заметка'; Description='Локальная заметка с общей темой и сохранением при скрытии.'; Source='QuickNote'; Exe='QuickNote.exe'; Preview='notes' },
+    @{ Id='quick-note'; Name='Быстрая заметка'; Description='Заметки с форматированием, изображениями и плавающими списками.'; Source='QuickNote'; Exe='QuickNote.exe'; Preview='notes' },
     @{ Id='task-menu'; Name='Меню задач'; Description='Независимые панели файлов и папок по краям каждого экрана. Плавное раскрытие при наведении.'; Source='TaskMenu'; Exe='TaskMenu.exe'; Preview='menu' },
     @{ Id='mini-icons'; Name='Мини значки'; Description='Общее мини-меню значков HUB и расширений рядом с панелью задач.'; Source='MiniIcons'; Exe='MiniIcons.exe'; Preview='mini-icons' }
 )
@@ -48,7 +48,7 @@ if ($Test) {
     $testSources = @(Get-ChildItem -LiteralPath (Join-Path $root 'src\Modules\QuietMixer') -Filter '*.cs' | ForEach-Object FullName)
     $testSources += Join-Path $root 'src\Modules\Tests\ThemeTests.cs'
     $testSources += Join-Path $root 'src\Modules\ThemedSurface.cs'
-    $testSources += Join-Path $root 'src\Modules\QuickNote\Program.cs'
+    $testSources += @(Get-ChildItem -LiteralPath (Join-Path $root 'src\Modules\QuickNote') -Filter '*.cs' | ForEach-Object FullName)
     $testExe = Join-Path $Artifacts 'ModuleThemeTests.exe'
     & $compiler /nologo /utf8output /langversion:5 /target:exe /main:ModuleThemeTests "/out:$testExe" @refs @testSources
     if ($LASTEXITCODE -ne 0) { throw 'Module regression test compilation failed' }
