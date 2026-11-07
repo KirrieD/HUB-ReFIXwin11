@@ -1,0 +1,52 @@
+name: Extension release
+on:
+  push:
+    tags:
+      - 'quick-note-v*'
+      - 'quiet-mixer-v*'
+      - 'task-menu-v*'
+      - 'mini-icons-v*'
+concurrency:
+  group: refix-publication
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  release-extension:
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify selected extension
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -cnotmatch '^(quick-note|quiet-mixer|task-menu|mini-icons)-v([0-9]+\.[0-9]+\.[0-9]+)$') { throw 'Invalid tag' }
+          $id = $Matches[1]
+          ./build.ps1 -OnlyModule $id
+          if ($id -ceq 'quick-note') { ./tools/Build-Modules.ps1 -Artifacts artifacts -Only $id -Test }
+          ./tools/Merge-ModuleRelease.ps1 -Tag $env:RELEASE_TAG -Candidate artifacts/module-catalog.json -Catalog catalog/catalog.json -Output artifacts/catalog-release.json
+      - name: Publish only the changed module and update its catalogue entry
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Git {
+            & git.exe @args
+            if ($LASTEXITCODE -ne 0) { throw "git failed: $($args -join ' ')" }
+          }
+          $module = (Get-Content artifacts/module-catalog.json -Raw -Encoding UTF8 | ConvertFrom-Json).Modules[0]
+          $asset = "artifacts/packages/$($module.Id)-$($module.Version).zip"
+          $publish = Join-Path $env:RUNNER_TEMP "refix-module-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          Git fetch origin main
+          Git worktree add --detach $publish origin/main
+          $catalog = Join-Path $publish 'catalog/catalog.json'
+          ./tools/Merge-ModuleRelease.ps1 -Tag $env:RELEASE_TAG -Candidate artifacts/module-catalog.json -Catalog $catalog -Output $catalog
+          gh release create $env:RELEASE_TAG $asset --repo '${{ github.repository }}' --title "$($module.Name) $($module.Version)" --latest=false --notes "Обновление расширения $($module.Name). Версия HUB и другие расширения сохраняются."
+          if ($LASTEXITCODE -ne 0) { throw 'Extension release creation failed' }
+          Git -C $publish config user.name 'github-actions[bot]'
+          Git -C $publish config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          Git -C $publish add -- catalog/catalog.json
+          Git -C $publish commit -m "Publish catalogue entry for $env:RELEASE_TAG"
+          Git -C $publish push origin HEAD:main

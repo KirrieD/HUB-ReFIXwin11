@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Web.Script.Serialization;
 using System.Windows;
@@ -13,6 +14,7 @@ namespace ReFix.QuickNote
         public string Id { get; set; }
         public string ListId { get; set; }
         public string Name { get; set; }
+        public bool Markdown { get; set; }
         public string TopHint { get; set; }
         public string BottomHint { get; set; }
     }
@@ -24,11 +26,13 @@ namespace ReFix.QuickNote
         public int? X { get; set; }
         public int? Y { get; set; }
         public bool Collapsed { get; set; }
+        public string LastNoteId { get; set; }
     }
 
     public sealed class NoteIndex
     {
         public int SchemaVersion { get; set; }
+        public NotePageOptions PageOptions { get; set; }
         public List<NoteRecord> Notes { get; set; }
         public List<NoteList> Lists { get; set; }
         public List<string> Colors { get; set; }
@@ -69,9 +73,10 @@ namespace ReFix.QuickNote
             return new NoteRecord { Id = Guid.NewGuid().ToString("N"), Name = name, ListId = list.Id, TopHint = "", BottomHint = "" };
         }
 
-        internal NoteRecord AddNote(NoteList list)
+        internal NoteRecord AddNote(NoteList list, bool markdown = false)
         {
-            var note = NewRecord(list, "Новая заметка");
+            var note = NewRecord(list, markdown ? "Новая заметка.md" : "Новая заметка");
+            note.Markdown = markdown;
             Index.Notes.Add(note);
             try { Save(); }
             catch { Index.Notes.Remove(note); throw; }
@@ -113,7 +118,58 @@ namespace ReFix.QuickNote
 
         internal void SaveBody(NoteRecord note, FlowDocument document)
         {
-            Atomic(BodyPath(note), stream => { using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024, true)) writer.Write(json.Serialize(NoteDocument.Capture(document))); });
+            string path = BodyPath(note);
+            Checkpoint(note, false);
+            Atomic(path, stream => { using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024, true)) writer.Write(json.Serialize(NoteDocument.Capture(document))); });
+        }
+
+        internal void Checkpoint(NoteRecord note, bool force)
+        {
+            string path = BodyPath(note);
+            if (File.Exists(path))
+            {
+                var previous = History(note);
+                if (force || previous.Length == 0 || DateTime.UtcNow - File.GetCreationTimeUtc(previous[0]) > TimeSpan.FromSeconds(30))
+                {
+                    string snapshot = path + ".history-" + DateTime.UtcNow.Ticks;
+                    File.Copy(path, snapshot, false);
+                    File.SetCreationTimeUtc(snapshot, DateTime.UtcNow);
+                    long used = new FileInfo(snapshot).Length;
+                    for (int i = 0; i < previous.Length; i++)
+                    {
+                        used += new FileInfo(previous[i]).Length;
+                        if (i >= 19 || used > 100L * 1024 * 1024) File.Delete(previous[i]);
+                    }
+                }
+            }
+        }
+
+        internal string[] History(NoteRecord note)
+        {
+            if (!Directory.Exists(folder)) return new string[0];
+            return Directory.GetFiles(folder, Path.GetFileName(BodyPath(note)) + ".history-*").OrderByDescending(path => path, StringComparer.Ordinal).ToArray();
+        }
+
+        internal void ReadHistory(string path, FlowDocument document)
+        {
+            NoteDocument.Restore(document, json.Deserialize<List<NoteParagraph>>(File.ReadAllText(path, Encoding.UTF8)));
+        }
+
+        internal string AddImage(NoteRecord note, byte[] bytes, string extension)
+        {
+            if (!System.Text.RegularExpressions.Regex.IsMatch(extension ?? "", @"^\.[a-zA-Z0-9]{1,5}$")) extension = ".png";
+            string name = Guid.NewGuid().ToString("N") + extension.ToLowerInvariant();
+            string directory = BodyPath(note) + ".images";
+            Directory.CreateDirectory(directory);
+            Atomic(Path.Combine(directory, name), stream => stream.Write(bytes, 0, bytes.Length));
+            return name;
+        }
+
+        internal byte[] GetImage(NoteRecord note, string name)
+        {
+            if (!System.Text.RegularExpressions.Regex.IsMatch(name ?? "", @"^[a-f0-9]{32}\.[a-z0-9]{1,5}$")) return null;
+            string path = Path.Combine(BodyPath(note) + ".images", name);
+            return File.Exists(path) ? File.ReadAllBytes(path) : null;
         }
 
         void Atomic(string path, Action<Stream> write)

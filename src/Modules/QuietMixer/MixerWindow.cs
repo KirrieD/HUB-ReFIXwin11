@@ -45,7 +45,7 @@ namespace QuietMixer
         {
             this.layouts=layouts??new MixerLayoutStore(Paths.Root);ownsLayouts=layouts==null;layout=this.layouts.Current;this.layouts.Changed+=LayoutChanged;
             this.controls=controls??new ControlsStore(Paths.Root);ownsControls=controls==null;controlsChanged=delegate{Dispatcher.BeginInvoke(new Action(UpdateControlsHelp));};this.controls.Changed+=controlsChanged;
-            Title = "QuietMixer v"+ProductInfo.Version+" — микшер громкости"; Width = layout.WindowWidth; Height = layout.WindowHeight;
+            Title = "QuietMixer v"+ModuleVersions.QuietMixer+" — микшер громкости"; Width = layout.WindowWidth; Height = layout.WindowHeight;
             WindowStyle = WindowStyle.None; AllowsTransparency=true; ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false; Topmost = true; WindowStartupLocation = WindowStartupLocation.Manual;
             FontFamily = new FontFamily("Segoe UI Variable, Segoe UI"); FontSize = 13;
@@ -62,7 +62,7 @@ namespace QuietMixer
             header.ColumnDefinitions.Add(new ColumnDefinition()); header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             StackPanel title = new StackPanel();
             titleText.Text="Микшер громкости";titleText.FontWeight=FontWeights.SemiBold;titleText.TextWrapping=TextWrapping.Wrap;title.Children.Add(titleText);
-            subtitleText.Text="v"+ProductInfo.Version+" · Звук под вашим контролем";subtitleText.Opacity=.6;subtitleText.Margin=new Thickness(0,4,0,0);subtitleText.TextWrapping=TextWrapping.Wrap;title.Children.Add(subtitleText);
+            subtitleText.Text="v"+ModuleVersions.QuietMixer+" · Звук под вашим контролем";subtitleText.Opacity=.6;subtitleText.Margin=new Thickness(0,4,0,0);subtitleText.TextWrapping=TextWrapping.Wrap;title.Children.Add(subtitleText);
             header.Children.Add(title);
             Button menu = new Button { Content="⋯", Width=36, Height=34, FontSize=22, ToolTip="Настройки QuietMixer" };
             AutomationProperties.SetName(menu,"Настройки QuietMixer"); Grid.SetColumn(menu,1);

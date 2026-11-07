@@ -32,7 +32,7 @@ namespace ReFix.Hub
                 var entries=zip.Entries.Where(e=>e.FullName=="module.json").ToArray();
                 if(entries.Length!=1||entries[0].Length>65536)throw new InvalidDataException("Invalid embedded module metadata.");
                 using(var reader=new StreamReader(entries[0].Open()))manifest=new JavaScriptSerializer().Deserialize<ModuleManifest>(reader.ReadToEnd());
-                if(manifest==null||manifest.Id!=id||manifest.Version!=ReFix.Shared.ProductInfo.Version||manifest.EntryPoint!=executable||manifest.Kind!="process"||!zip.Entries.Any(e=>e.FullName==manifest.EntryPoint))throw new InvalidDataException("Embedded module identity mismatch.");
+                if(manifest==null||manifest.Id!=id||manifest.EntryPoint!=executable||manifest.Kind!="process"||!zip.Entries.Any(e=>e.FullName==manifest.EntryPoint))throw new InvalidDataException("Embedded module identity mismatch.");
             }
             using(var hash=SHA256.Create())manifest.Sha256=BitConverter.ToString(hash.ComputeHash(data)).Replace("-","").ToLowerInvariant();
             manifest.PackageUrl="";manifest.Validate();

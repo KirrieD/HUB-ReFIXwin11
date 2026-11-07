@@ -17,6 +17,7 @@ namespace ReFix.QuickNote
         public List<List<NoteParagraph>> Items { get; set; }
         public double Size { get; set; }
         public bool Heading { get; set; }
+        public string Alignment { get; set; }
         public List<NotePart> Parts { get; set; }
     }
 
@@ -27,6 +28,7 @@ namespace ReFix.QuickNote
         public string Image { get; set; }
         public double Size { get; set; }
         public int Weight { get; set; }
+        public string Font { get; set; }
         public bool Italic { get; set; }
         public bool Underline { get; set; }
         public bool Strike { get; set; }
@@ -48,7 +50,7 @@ namespace ReFix.QuickNote
             {
                 var paragraph = block as Paragraph;
                 if (paragraph != null)
-                    result.Add(new NoteParagraph { Size = paragraph.FontSize, Heading = paragraph.FontWeight >= FontWeights.SemiBold, Parts = CaptureInlines(paragraph.Inlines).ToList() });
+                    result.Add(new NoteParagraph { Size = paragraph.FontSize, Alignment = paragraph.TextAlignment.ToString(), Heading = paragraph.FontWeight >= FontWeights.SemiBold, Parts = CaptureInlines(paragraph.Inlines).ToList() });
                 var list = block as System.Windows.Documents.List;
                 if (list != null)
                     result.Add(new NoteParagraph { Marker = list.MarkerStyle.ToString(), StartIndex = list.StartIndex, Items = list.ListItems.Select(item => CaptureBlocks(item.Blocks)).ToList() });
@@ -102,7 +104,7 @@ namespace ReFix.QuickNote
                 {
                     yield return new NotePart
                     {
-                        Text = run.Text, Size = run.FontSize, Weight = run.FontWeight.ToOpenTypeWeight(),
+                        Text = run.Text, Size = run.FontSize, Font = run.FontFamily.Source, Weight = run.FontWeight.ToOpenTypeWeight(),
                         Italic = run.FontStyle != FontStyles.Normal,
                         Underline = run.TextDecorations != null && run.TextDecorations.Any(d => d.Location == TextDecorationLocation.Underline),
                         Strike = run.TextDecorations != null && run.TextDecorations.Any(d => d.Location == TextDecorationLocation.Strikethrough),
@@ -170,7 +172,9 @@ namespace ReFix.QuickNote
                     yield return list;
                     continue;
                 }
-                var paragraph = new Paragraph { FontSize = FontSize(record.Size), FontWeight = record.Heading ? FontWeights.SemiBold : FontWeights.Normal };
+                TextAlignment alignment;
+                if (!Enum.TryParse(record.Alignment, out alignment) || !Enum.IsDefined(typeof(TextAlignment), alignment)) alignment = TextAlignment.Left;
+                var paragraph = new Paragraph { TextAlignment = alignment, FontSize = FontSize(record.Size), FontWeight = record.Heading ? FontWeights.SemiBold : FontWeights.Normal };
                 foreach (var part in record.Parts)
                 {
                     if (part.Break) paragraph.Inlines.Add(new LineBreak());
@@ -178,6 +182,7 @@ namespace ReFix.QuickNote
                     else
                     {
                         var run = new Run(part.Text ?? "") { FontSize = FontSize(part.Size), FontWeight = FontWeight.FromOpenTypeWeight(Math.Max(1, Math.Min(999, part.Weight))), FontStyle = part.Italic ? FontStyles.Italic : FontStyles.Normal };
+                        if (!String.IsNullOrWhiteSpace(part.Font)) run.FontFamily = new FontFamily(part.Font);
                         if (part.Underline || part.Strike)
                         {
                             var decorations = new TextDecorationCollection();

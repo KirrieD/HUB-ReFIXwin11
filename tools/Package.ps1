@@ -10,12 +10,12 @@ $files = @('HUB-ReFIX.exe','HUB-ReFIX.exe.config','HUB-ReFIX.Core.exe','HUB-ReFI
 $packages = @()
 $ids = @()
 foreach ($module in $catalog.Modules) {
-    if ($module.Id -cnotin @('quiet-mixer','quick-note','task-menu','mini-icons') -or $module.Id -cin $ids -or $module.Version -cne $version -or $module.MinHubVersion -cne $version) { throw 'Unexpected module/version in catalogue' }
+    if ($module.Id -cnotin @('quiet-mixer','quick-note','task-menu','mini-icons') -or $module.Id -cin $ids -or $module.Version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$' -or [version]$module.MinHubVersion -gt [version]$version) { throw 'Unexpected module/version in catalogue' }
     $ids += $module.Id
-    $name = $module.Id + '-' + $version + '.zip'
+    $name = $module.Id + '-' + $module.Version + '.zip'
     $path = Join-Path $Artifacts "packages\$name"
     if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $module.Sha256) { throw "Catalogue hash mismatch: $name" }
-    if ($module.Id -cin @('quiet-mixer','quick-note')) { $packages += $name }
+    if ($module.Id -cin @('quiet-mixer','quick-note')) { $packages += $module.Id + '-' + $version + '.zip' }
 }
 if ($catalog.SchemaVersion -ne 1 -or $ids.Count -ne 4) { throw 'Unexpected catalogue schema/module count' }
 foreach ($file in $files) { if (!(Test-Path -LiteralPath (Join-Path $Artifacts $file) -PathType Leaf)) { throw "Build first: missing $file" } }
@@ -36,8 +36,18 @@ New-Item -ItemType Directory -Path (Join-Path $destination 'packages'),(Join-Pat
 foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $Artifacts $file) -Destination $destination -Force }
 # Older updaters validate exactly these two bundled package identities. The new
 # offline menu package is embedded in Core, whose SHA256 is already verified.
-[ordered]@{ SchemaVersion=1; Modules=@($catalog.Modules | Where-Object { $_.Id -cin @('quiet-mixer','quick-note') }) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $destination 'catalog.json') -Encoding UTF8
-foreach ($file in $packages) { Copy-Item -LiteralPath (Join-Path $Artifacts "packages\$file") -Destination (Join-Path $destination 'packages') -Force }
+$portableModules = foreach ($module in $catalog.Modules | Where-Object { $_.Id -cin @('quiet-mixer','quick-note') }) {
+    $entry = $module | Select-Object *
+    $source = Join-Path $Artifacts ('packages\' + $module.Id + '-' + $module.Version + '.zip')
+    $alias = Join-Path $destination ('packages\' + $module.Id + '-' + $version + '.zip')
+    Copy-Item -LiteralPath $source -Destination $alias -Force
+    if ($module.Version -cne $version) {
+        $entry | Add-Member -NotePropertyName BundledModuleVersion -NotePropertyValue $module.Version
+        $entry.Version = $version
+    }
+    $entry
+}
+[ordered]@{ SchemaVersion=1; Modules=@($portableModules) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $destination 'catalog.json') -Encoding UTF8
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $destination -Force
 foreach ($file in @('Install.ps1','Install.cmd','Uninstall.ps1','Uninstall.cmd')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $destination 'tools') -Force }
 $bundleFiles = @($files) + @('README.md') + @($packages | ForEach-Object { 'packages\' + $_ }) + @('tools\Install.ps1','tools\Install.cmd','tools\Uninstall.ps1','tools\Uninstall.cmd')

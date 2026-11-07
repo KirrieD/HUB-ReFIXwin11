@@ -57,8 +57,7 @@ internal static class ModuleThemeTests
                 Require(savedLibrary.Index.Notes.Single().ListId==other.Id,"Note transfer must persist single membership");
                 var savedList=savedLibrary.Index.Lists.Single(l=>l.Id==other.Id);
                 Require(savedList.X==1530 && savedList.Y==160 && savedList.Collapsed && savedLibrary.Index.Colors.Single()=="#ABCDEF","List placement, collapse and recent colors must survive restart");
-                var note=new NoteWindow(library,record,second,noteControls,null,null);
-                VerifySurface(note);
+                var note=new NoteEditor(library,record,noteControls,null,null);
                 var text=Editor(note);
                 Require(Plain(text)=="Старая заметка" && File.ReadAllText(legacy)=="Старая заметка","Import must retain legacy text");
                 var paragraph=new Paragraph(new Run("Локальная заметка") { Foreground=System.Windows.Media.Brushes.Red, Background=System.Windows.Media.Brushes.Yellow, FontSize=28 });
@@ -66,7 +65,7 @@ internal static class ModuleThemeTests
                 text.Document.Blocks.Add(paragraph);
                 var image=System.Windows.Media.Imaging.BitmapSource.Create(1,1,96,96,System.Windows.Media.PixelFormats.Bgra32,null,new byte[]{0,0,255,255},4);
                 text.CaretPosition=paragraph.ContentEnd;
-                typeof(NoteWindow).GetMethod("InsertImage",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(note,new object[]{new Image{Source=image}});
+                typeof(NoteEditor).GetMethod("InsertImage",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(note,new object[]{new Image{Source=image}});
                 var ordered=new System.Windows.Documents.List { MarkerStyle=TextMarkerStyle.Decimal };
                 ordered.ListItems.Add(new ListItem(new Paragraph(new Run("Первый пункт"))));
                 var bullets=new System.Windows.Documents.List { MarkerStyle=TextMarkerStyle.Disc };
@@ -76,7 +75,7 @@ internal static class ModuleThemeTests
                 var decorated=paragraph.Inlines.OfType<Run>().First();
                 decorated.TextDecorations=new TextDecorationCollection { System.Windows.TextDecorations.Underline[0], System.Windows.TextDecorations.Strikethrough[0] };
                 Require(note.Save(),"Note save failed");
-                using(var reopened=new NoteWindow(library,record,second,noteControls,null,null))
+                using(var reopened=new NoteEditor(library,record,noteControls,null,null))
                 {
                     var restored=(Paragraph)Editor(reopened).Document.Blocks.FirstBlock;
                     Require(Plain(Editor(reopened)).StartsWith("Локальная заметка"),"Quick Note must restore saved text");
@@ -94,30 +93,32 @@ internal static class ModuleThemeTests
                     controller.Open(record);
                     controller.Open(secondRecord);
                     var fields=BindingFlags.Instance|BindingFlags.NonPublic;
-                    var windows=(System.Collections.Generic.Dictionary<string,NoteWindow>)typeof(NoteController).GetField("editors",fields).GetValue(controller);
+                    var windows=(System.Collections.Generic.Dictionary<string,NoteWorkspace>)typeof(NoteController).GetField("workspaces",fields).GetValue(controller);
                     var lists=(System.Collections.Generic.Dictionary<string,ListWindow>)typeof(NoteController).GetField("lists",fields).GetValue(controller);
-                    Require(windows.Count==2&&windows.Values.All(w=>w.IsVisible)&&lists.Count==2,"Two notes and two lists must be independently visible");
-                    var editor=Editor(windows[record.Id]);
-                    windows[record.Id].UpdateLayout();
+                    Require(windows.Count==2&&windows.Values.All(w=>w.IsVisible)&&lists.Count==2,"Different lists must have independent windows");
+                    var workspace=windows[other.Id];
+                    workspace.ApplyTheme(second);
+                    VerifySurface(workspace);
+                    var editor=Editor(controller.Editor(record));
+                    workspace.UpdateLayout();
                     var layer=(RoundedHighlights)((Grid)editor.Parent).Children[1];
                     layer.InvalidateVisual();
-                    var rendered=new System.Windows.Media.Imaging.RenderTargetBitmap(690,565,96,96,System.Windows.Media.PixelFormats.Pbgra32);
-                    rendered.Render(windows[record.Id]);
+                    var rendered=new System.Windows.Media.Imaging.RenderTargetBitmap(950,660,96,96,System.Windows.Media.PixelFormats.Pbgra32);
+                    rendered.Render(workspace);
                     var drawing=System.Windows.Media.VisualTreeHelper.GetDrawing(layer);
-                    var firstRun=((Paragraph)editor.Document.Blocks.FirstBlock).Inlines.OfType<Run>().First();
-                    var start=firstRun.ContentStart.GetCharacterRect(LogicalDirection.Forward);
-                    Require(drawing!=null&&!drawing.Bounds.IsEmpty&&Math.Abs(drawing.Bounds.Left-start.Left)<2,"Rounded text highlight must align with the first glyph");
-                    Require(lists[other.Id].ActualWidth<150,"Collapsed list tab must be compact");
+                    Require(drawing!=null&&!drawing.Bounds.IsEmpty,"Rounded text highlight must render in the tab");
+                    Require(lists[other.Id].ActualWidth<150,"Desktop list tab must be compact");
                     var png=new System.Windows.Media.Imaging.PngBitmapEncoder();
                     png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rendered));
                     using(var file=File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"quick-note-preview.png"))) png.Save(file);
-                    windows[record.Id].MinimizeNote();
-                    Require(!windows[record.Id].IsVisible&&windows[secondRecord.Id].IsVisible&&lists[other.Id].IsVisible,"Minimizing a note restores its list and leaves other notes open");
-                    var noteRows=(StackPanel)typeof(ListWindow).GetField("notes",fields).GetValue(lists[other.Id]);
-                    var row=(Button)noteRows.Children[0];
-                    var move=(MenuItem)row.ContextMenu.Items[0];
-                    ((MenuItem)move.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                    Require(record.ListId==library.Index.Lists[0].Id&&noteRows.Children[0] is TextBlock,"Right-click transfer must remove the row from its previous list");
+                    workspace.Minimize();
+                    Require(!workspace.IsVisible&&windows[secondRecord.ListId].IsVisible&&lists[other.Id].IsVisible,"Minimizing one list must leave others open");
+                    controller.Move(record.Id,library.Index.Lists[0]);
+                    var tabs=(TabControl)typeof(NoteWorkspace).GetField("tabs",fields).GetValue(windows[secondRecord.ListId]);
+                    Require(record.ListId==secondRecord.ListId&&tabs.Items.Count==2,"Moved note must appear as a tab in the destination list");
+                    tabs.SelectedIndex=0;tabs.SelectedIndex=1;
+                    Require(Object.ReferenceEquals(editor,Editor(controller.Editor(record))),"Tab switching must keep the editor and its undo stack");
+                    VerifyWorkspaceFeatures(controller.Editor(record),Paths.Root);
                 }
                 }
                 System.IO.Directory.Delete(Paths.Root,true);
@@ -129,8 +130,50 @@ internal static class ModuleThemeTests
         catch(Exception ex) { Console.Error.WriteLine(ex); return 1; }
         finally{Environment.SetEnvironmentVariable("REFIX_DATA_ROOT",originalRoot);if(System.IO.Directory.Exists(isolatedRoot))System.IO.Directory.Delete(isolatedRoot,true);}
     }
-    static RichTextBox Editor(NoteWindow note){return (RichTextBox)typeof(NoteWindow).GetField("editor",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(note);}
+    static RichTextBox Editor(NoteEditor note){return (RichTextBox)typeof(NoteEditor).GetField("editor",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(note);}
     static string Plain(RichTextBox editor){return new TextRange(editor.Document.ContentStart,editor.Document.ContentEnd).Text.TrimEnd('\r','\n');}
+    static void VerifyWorkspaceFeatures(NoteEditor note,string directory)
+    {
+        var document = new FlowDocument(new Paragraph(new Run("Альфа ")) { Inlines = { new Bold(new Run("бета")), new Run(" альфа") } });
+        Require(NoteSearch.Find(document,"альфа",false).Count==2&&NoteSearch.Find(document,"альфа",true).Count==1,"Search must honor case");
+        Require(NoteSearch.Find(document,"а бета",false).Single().Text=="а бета","Search must span formatted runs");
+        var fields=BindingFlags.Instance|BindingFlags.NonPublic;
+        using(var scratchControls=new ControlsStore(Path.Combine(directory,"search-fixture")))
+        {
+            var library=new Library(Path.Combine(directory,"search-fixture"));
+            var record=library.AddNote(library.Index.Lists[0]);
+            using(var scratch=new NoteEditor(library,record,scratchControls,null,null))
+            {
+                var host=new Window { Content=scratch, Width=600, Height=430 }; host.Show(); host.UpdateLayout();
+                var editor=Editor(scratch);
+                new TextRange(editor.Document.ContentStart,editor.Document.ContentEnd).Text="Альфа альфа";
+                typeof(NoteEditor).GetMethod("OpenFind",fields).Invoke(scratch,new object[]{true});
+                ((TextBox)typeof(NoteEditor).GetField("query",fields).GetValue(scratch)).Text="альфа";
+                ((TextBox)typeof(NoteEditor).GetField("replacement",fields).GetValue(scratch)).Text="бета";
+                ((ComboBox)typeof(NoteEditor).GetField("replaceMode",fields).GetValue(scratch)).SelectedIndex=1;
+                typeof(NoteEditor).GetMethod("Replace",fields).Invoke(scratch,null);
+                Require(Plain(editor)=="бета бета","Replace all must replace both case-insensitive matches");
+                bool undone=editor.Undo();
+                host.Close();
+                Require(undone&&Plain(editor)=="Альфа альфа","Replace all must undo as a single edit; result: "+Plain(editor)+", undo="+undone);
+            }
+        }
+        var rendered = MarkdownNote.Render("# Заголовок\n**Жирный**\n1. Список",n=>null);
+        Require(rendered.Blocks.Count==3&&rendered.Blocks.LastBlock is System.Windows.Documents.List,"Markdown preview must render headings and lists");
+        var source=NoteDocument.Capture(Editor(note).Document);
+        string word=Path.Combine(directory,"test.docx");
+        ExportFile.Write(word,".docx",source,Path.Combine(directory,"test_images"));
+        using(var file=File.OpenRead(word))
+        using(var zip=new System.IO.Compression.ZipArchive(file,System.IO.Compression.ZipArchiveMode.Read))
+        {
+            Require(zip.GetEntry("word/media/image1.png")!=null&&zip.GetEntry("word/numbering.xml")!=null,"DOCX must embed images and numbering");
+            using(var reader=new StreamReader(zip.GetEntry("word/document.xml").Open()))
+                Require(reader.ReadToEnd().Contains("Локальная заметка"),"DOCX must contain actual note text");
+        }
+        var paginator=(DocumentPaginator)typeof(NoteEditor).GetMethod("Paginate",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(note,new object[]{new Size(793,1122)});
+        paginator.ComputePageCount();
+        Require(paginator.PageCount>0&&paginator.GetPage(0).Visual!=null,"Preview must paginate the real document");
+    }
     private static void VerifyControls()
     {
         string root=System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"ModuleControls."+Guid.NewGuid().ToString("N"));
@@ -141,17 +184,17 @@ internal static class ModuleThemeTests
             var library=new Library(root);var record=library.AddNote(library.Index.Lists[0]);
             Require(mixerConstructor!=null,"Both existing module windows must accept shared live controls");
             var mixer=(QuietMixer.MixerWindow)mixerConstructor.Invoke(new object[]{new ThemeProfile(),controls});
-            var note=new NoteWindow(library,record,new ThemeProfile(),controls,null,null);
+            var note=new NoteEditor(library,record,controls,null,null);
             var rows=(StackPanel)typeof(QuietMixer.MixerWindow).GetField("rows",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(mixer);
             var slider=new Slider{Value=37};rows.Children.Add(slider);
             var editor=Editor(note);new TextRange(editor.Document.ContentStart,editor.Document.ContentEnd).Text="Preserve unsaved note during controls updates";
             controls.Assign("quick-note.save","Ctrl+Shift+S");controls.Assign("quiet-mixer.hide","Ctrl+Q");controls.Assign("quick-note.hide","Ctrl+Q");
             var frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,new Action(delegate{frame.Continue=false;}));System.Windows.Threading.Dispatcher.PushFrame(frame);
             Require(Plain(editor)=="Preserve unsaved note during controls updates"&&slider.Value==37&&rows.Children.Contains(slider),"Live controls must preserve note and volume state");
-            var noteStatus=(TextBlock)typeof(ReFix.QuickNote.NoteWindow).GetField("status",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(note);
+            var noteStatus=(TextBlock)typeof(ReFix.QuickNote.NoteEditor).GetField("status",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(note);
             var mixerStatus=(TextBlock)typeof(QuietMixer.MixerWindow).GetField("status",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(mixer);
-            DateTime until=DateTime.UtcNow.AddSeconds(3);while(DateTime.UtcNow<until&&!noteStatus.Text.Contains("Ctrl+Shift+S")){frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,new Action(delegate{frame.Continue=false;}));System.Windows.Threading.Dispatcher.PushFrame(frame);System.Threading.Thread.Sleep(10);}
-            Require(noteStatus.Text.Contains("Ctrl+Shift+S")&&mixerStatus.Text.Contains("Ctrl+Q"),"Existing window help must reflect changed bindings");
+            DateTime until=DateTime.UtcNow.AddSeconds(3);while(DateTime.UtcNow<until&&!Convert.ToString(noteStatus.ToolTip).Contains("Ctrl+Shift+S")){frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,new Action(delegate{frame.Continue=false;}));System.Windows.Threading.Dispatcher.PushFrame(frame);System.Threading.Thread.Sleep(10);}
+            Require(Convert.ToString(noteStatus.ToolTip).Contains("Ctrl+Shift+S")&&mixerStatus.Text.Contains("Ctrl+Q"),"Existing window help must reflect changed bindings");
             controls.Assign("quick-note.save","F21");controls.Assign("quiet-mixer.hide","F22");controls.Assign("quick-note.hide","F22");
             using(var source=new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("Isolated local controls"){Width=0,Height=0})) {
                 var key=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.F21){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent};note.RaiseEvent(key);

@@ -13,7 +13,7 @@ using ReFix.Modules;
 
 namespace ReFix.QuickNote
 {
-    internal sealed class NoteWindow : Window, IDisposable
+    internal sealed partial class NoteEditor : UserControl, IDisposable
     {
         readonly Library library;
         readonly NoteRecord note;
@@ -23,10 +23,12 @@ namespace ReFix.QuickNote
         readonly TextBox name, topHint, bottomHint;
         readonly TextBlock status = new TextBlock();
         readonly DispatcherTimer autosave;
-        readonly ThemedSurface surface;
+        readonly RoundedHighlights highlights;
+        readonly DockPanel root;
+        readonly WrapPanel tools;
         bool bodyDirty, metadataDirty, disposed, saveFailed;
 
-        internal NoteWindow(Library library, NoteRecord note, ThemeProfile theme, ControlsStore controls,
+        internal NoteEditor(Library library, NoteRecord note, ControlsStore controls,
             Action<NoteRecord> hidden, Action<NoteRecord> updated)
         {
             this.library = library;
@@ -34,27 +36,16 @@ namespace ReFix.QuickNote
             this.controls = controls;
             this.hidden = hidden;
             this.updated = updated;
-            Width = 690; Height = 565; MinWidth = 370; MinHeight = 370;
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            WindowStyle = WindowStyle.None; AllowsTransparency = true; ResizeMode = ResizeMode.CanResizeWithGrip;
-            Background = Brushes.Transparent;
-            ThemeControls.Install(this);
-
-            var root = new DockPanel { Margin = new Thickness(18) };
-            var title = new DockPanel { Background = Brushes.Transparent, Margin = new Thickness(0, 0, 0, 8) };
-            var hide = Button("−", MinimizeNote);
-            hide.ToolTip = "Сохранить и свернуть заметку";
-            DockPanel.SetDock(hide, Dock.Right);
-            title.Children.Add(hide);
-            title.Children.Add(new TextBlock { Text = "Быстрая заметка · v" + ProductInfo.Version, FontSize = 17, VerticalAlignment = VerticalAlignment.Center });
-            title.MouseLeftButtonDown += delegate { if (Mouse.LeftButton == MouseButtonState.Pressed) DragMove(); };
-            Add(root, title, Dock.Top);
+            root = new DockPanel { Margin = new Thickness(10) };
 
             name = Field(note.Name, 180);
             name.ToolTip = "Название заметки";
+            name.Visibility = Visibility.Collapsed;
+            name.LostKeyboardFocus += delegate { name.Visibility = Visibility.Collapsed; Save(); };
+            name.PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled=true; editor.Focus(); } };
             Add(root, name, Dock.Top);
 
-            var tools = new WrapPanel { Margin = new Thickness(0, 5, 0, 5) };
+            tools = new WrapPanel { Margin = new Thickness(0, 5, 0, 5) };
             var styles = new ComboBox { MinWidth = 130, Margin = new Thickness(0, 2, 6, 2), ToolTip = "Стиль абзаца" };
             styles.Items.Add(new ComboBoxItem { Content = "Стиль абзаца", IsEnabled = false });
             styles.Items.Add("Обычный текст");
@@ -95,13 +86,11 @@ namespace ReFix.QuickNote
             var page = new Grid { ClipToBounds = true };
             page.SetResourceReference(Panel.BackgroundProperty, "Hub.Surface");
             page.Children.Add(editor);
-            var highlights = new RoundedHighlights(editor);
+            highlights = new RoundedHighlights(editor);
             Panel.SetZIndex(highlights, -1);
             page.Children.Add(highlights);
             root.Children.Add(page);
-            surface = new ThemedSurface(root);
-            Content = surface;
-            ApplyTheme(theme);
+            Content = root;
 
             autosave = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(650) };
             autosave.Tick += delegate { autosave.Stop(); Save(); };
@@ -119,10 +108,8 @@ namespace ReFix.QuickNote
                 e.Handled = true;
             };
             controls.Changed += ControlsChanged;
-            Closing += delegate(object sender, System.ComponentModel.CancelEventArgs e) { if (!disposed) { e.Cancel = true; MinimizeNote(); } };
             PreviewKeyDown += HandleKey;
-            StateChanged += delegate { if (WindowState == WindowState.Minimized) { WindowState = WindowState.Normal; MinimizeNote(); } };
-            UpdateTitle();
+            ConfigureWorkspace();
             UpdateStatus();
         }
 
@@ -219,7 +206,7 @@ namespace ReFix.QuickNote
         void Palette(Button button, DependencyProperty property)
         {
             var range = new TextRange(editor.Selection.Start, editor.Selection.End);
-            var menu = new ContextMenu { PlacementTarget = button, Resources = Resources };
+            var menu = new ContextMenu { PlacementTarget = button, Resources = Window.GetWindow(this).Resources };
             menu.Items.Add(new MenuItem { Header = "Стандартные цвета", IsEnabled = false });
             AddSwatches(menu, new[] { "#000000", "#FFFFFF", "#808080", "#C00000", "#FF0000", "#FFC000", "#FFFF00", "#92D050", "#00B050", "#00B0F0", "#0070C0", "#002060", "#7030A0", "#FF66AA" }, color => ApplyColor(range, property, color));
             if (library.Index.Colors.Count > 0)
@@ -240,7 +227,7 @@ namespace ReFix.QuickNote
                 panel.Children.Add(hint);
                 panel.Children.Add(input);
                 string chosen = null;
-                var dialog = new Window { Owner = this, Title = "Свой цвет", Width = 380, SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, Content = panel };
+                var dialog = new Window { Owner = Window.GetWindow(this), Title = "Свой цвет", Width = 380, SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, Content = panel };
                 var apply = Button("Применить", delegate { if (TryColor(input.Text, out chosen)) dialog.DialogResult = true; else hint.Text = "Введите корректный HEX или RGB от 0 до 255."; });
                 apply.IsDefault = true;
                 panel.Children.Add(apply);
@@ -302,18 +289,20 @@ namespace ReFix.QuickNote
         void SelectImages()
         {
             var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Filter = "Изображения|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.tif;*.tiff;*.ico;*.img|Все файлы|*.*" };
-            if (dialog.ShowDialog(this) == true) InsertFiles(dialog.FileNames);
+            if (dialog.ShowDialog(Window.GetWindow(this)) == true) InsertFiles(dialog.FileNames);
         }
 
         void Paste(object sender, DataObjectPastingEventArgs e)
         {
+            if (PasteNoteFragment(e)) return;
             var files = e.DataObject.GetData(DataFormats.FileDrop) as string[];
             if (files != null) { e.CancelCommand(); InsertFiles(files); return; }
             if (e.DataObject.GetData(DataFormats.Bitmap) is BitmapSource)
             {
                 e.CancelCommand();
                 var source = (BitmapSource)e.DataObject.GetData(DataFormats.Bitmap);
-                InsertImage(new Image { Source = source, Width = Math.Min(520, source.Width), Stretch = Stretch.Uniform });
+                if (note.Markdown) PasteMarkdownBitmap(source);
+                else InsertImage(new Image { Source = source, Width = Math.Min(520, source.Width), Stretch = Stretch.Uniform });
                 return;
             }
             if (e.DataObject.GetDataPresent(DataFormats.UnicodeText)) e.FormatToApply = DataFormats.UnicodeText;
@@ -326,7 +315,8 @@ namespace ReFix.QuickNote
             {
                 try
                 {
-                    InsertImage(NoteDocument.DecodeImage(File.ReadAllBytes(path)));
+                    if (note.Markdown) AddMarkdownImage(path);
+                    else InsertImage(NoteDocument.DecodeImage(File.ReadAllBytes(path)));
                 }
                 catch (Exception ex) { status.Text = "Не удалось вставить изображение: " + ex.Message; }
             }
@@ -347,21 +337,21 @@ namespace ReFix.QuickNote
         {
             var profile = controls.Current;
             var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (finding && key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None) { CloseFind(); e.Handled = true; return; }
             if (KeyChord.Parse(profile.Get("quick-note.hide")).Matches(key, Keyboard.Modifiers)) { e.Handled = true; MinimizeNote(); }
             else if (KeyChord.Parse(profile.Get("quick-note.save")).Matches(key, Keyboard.Modifiers)) { e.Handled = true; Save(); }
         }
 
         void QueueSave() { saveFailed = false; UpdateStatus(); autosave.Stop(); autosave.Start(); }
-        void UpdateTitle() { Title = note.Name + " · Быстрая заметка"; }
         void UpdateStatus()
         {
             if (disposed || saveFailed) return;
             var profile = controls.Current;
-            status.Text = (bodyDirty || metadataDirty ? "Изменено" : "Сохранено") + " · " + profile.Get("quick-note.save") + " — сохранить · " + profile.Get("quick-note.hide") + " — свернуть";
+            status.Text = StatusDetails() + "  ·  " + (bodyDirty || metadataDirty ? "Изменено" : "Сохранено");
+            status.ToolTip = profile.Get("quick-note.save") + " — сохранить · " + profile.Get("quick-note.hide") + " — свернуть";
         }
         void ControlsChanged(object sender, EventArgs e) { if (!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(UpdateStatus)); }
 
-        internal void ApplyTheme(ThemeProfile profile) { surface.Apply(this, profile); }
         internal bool Save()
         {
             autosave.Stop();
@@ -375,7 +365,6 @@ namespace ReFix.QuickNote
                     note.BottomHint = bottomHint.Text;
                     library.Save();
                     metadataDirty = false;
-                    UpdateTitle();
                     if (updated != null) updated(note);
                 }
                 saveFailed = false;
@@ -393,7 +382,6 @@ namespace ReFix.QuickNote
         internal void MinimizeNote()
         {
             if (!Save()) return;
-            Hide();
             if (hidden != null) hidden(note);
         }
 
@@ -403,7 +391,6 @@ namespace ReFix.QuickNote
             disposed = true;
             autosave.Stop();
             controls.Changed -= ControlsChanged;
-            Close();
         }
     }
 }

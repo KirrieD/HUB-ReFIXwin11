@@ -2,6 +2,9 @@ name: Release
 on:
   push:
     tags: ['v*']
+concurrency:
+  group: refix-publication
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:
@@ -13,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and test
         shell: powershell
-        run: ./build.ps1 -Test
+        run: ./build.ps1 -Test -PublishedPackages
       - name: Prepare release catalogue and portable package
         shell: powershell
         run: |
@@ -28,6 +31,7 @@ jobs:
           $catalog = Get-Content artifacts/catalog.json -Raw -Encoding UTF8 | ConvertFrom-Json
           $assets = @("artifacts/HUB-ReFIXwin11-$version.zip")
           foreach ($module in $catalog.Modules) {
+            if (-not $module.PackageUrl.StartsWith("https://github.com/KirrieD/HUB-ReFIXwin11/releases/download/$env:RELEASE_TAG/")) { continue }
             $name = $module.Id + '-' + $module.Version + '.zip'
             $path = Join-Path 'artifacts/packages' $name
             if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $module.Sha256) { throw "Published package hash mismatch: $name" }

@@ -40,7 +40,7 @@ namespace ReFix.QuickNote
                     menu.Items.Add("Выйти", null, delegate { stop(); });
                     tray.ContextMenuStrip = menu;
                     tray.MouseClick += delegate(object sender, System.Windows.Forms.MouseEventArgs e) { if (e.Button == System.Windows.Forms.MouseButtons.Left) controller.Show(); };
-                    using (var miniTray = new MiniTrayClient(Paths.Root, "quick-note", "Быстрая заметка", ProductInfo.Version, tray, controller.Show, (x, y) => menu.Show(x, y), themes))
+                    using (var miniTray = new MiniTrayClient(Paths.Root, "quick-note", "Быстрая заметка", ModuleVersions.QuickNote, tray, controller.Show, (x, y) => menu.Show(x, y), themes))
                     using (var runtime = new ModuleRuntime("quick-note", delegate { app.Dispatcher.BeginInvoke(new Action(controller.Show)); }, delegate { app.Dispatcher.BeginInvoke(stop); }))
                     {
                         app.SessionEnding += delegate(object sender, SessionEndingCancelEventArgs e) { e.Cancel = !controller.SaveAll(); };

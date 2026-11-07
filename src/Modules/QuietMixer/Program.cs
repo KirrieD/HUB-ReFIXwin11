@@ -95,7 +95,7 @@ namespace QuietMixer
                 });
 
                 tray.Icon=System.Drawing.SystemIcons.Application;
-                Action updateLabel=delegate {var live=controls.GetRuntime("quiet-mixer.toggle");string key=live==null?controls.Current.Get("quiet-mixer.toggle"):live.Actual;string label="QuietMixer v"+ProductInfo.Version+(key!=""?" · "+key:"");tray.Text=label.Length>63?label.Substring(0,63):label;};updateLabel();
+                Action updateLabel=delegate {var live=controls.GetRuntime("quiet-mixer.toggle");string key=live==null?controls.Current.Get("quiet-mixer.toggle"):live.Actual;string label="QuietMixer v"+ModuleVersions.QuietMixer+(key!=""?" · "+key:"");tray.Text=label.Length>63?label.Substring(0,63):label;};updateLabel();
                 EventHandler controlsChanged=delegate{app.Dispatcher.BeginInvoke(updateLabel);};controls.Changed+=controlsChanged;controls.RuntimeChanged+=controlsChanged;
                 Forms.ContextMenuStrip menu=new Forms.ContextMenuStrip();
                 menu.Items.Add("Открыть микшер",null,delegate { show(); });
@@ -105,7 +105,7 @@ namespace QuietMixer
                 app.Exit+=delegate { tray.Visible=false;  if(popup!=null) popup.Close(); menu.Dispose(); };
                 EventHandler changed=delegate { app.Dispatcher.BeginInvoke(new Action(delegate { if(popup!=null) popup.ApplyTheme(themes.Current); })); };
                 themes.Changed+=changed;
-                using(var miniTray=new MiniTrayClient(Paths.Root,"quiet-mixer","Микшер громкости",ProductInfo.Version,tray,toggle,delegate(int x,int y){menu.Show(x,y);},themes))
+                using(var miniTray=new MiniTrayClient(Paths.Root,"quiet-mixer","Микшер громкости",ModuleVersions.QuietMixer,tray,toggle,delegate(int x,int y){menu.Show(x,y);},themes))
                 using(ModuleRuntime runtime=new ModuleRuntime("quiet-mixer",
                     delegate { app.Dispatcher.BeginInvoke(show); },
                     delegate { app.Dispatcher.BeginInvoke(new Action(delegate { app.Shutdown(); })); }))

@@ -14,13 +14,11 @@ namespace ReFix.QuickNote
 {
     internal sealed class ListWindow : Window, IDisposable
     {
-        const string NoteFormat = "ReFIX.QuickNote.Note";
+        const string NoteFormat = NoteWorkspace.NoteFormat;
         readonly NoteList list;
         readonly Library library;
         readonly NoteController controller;
         readonly ThemedSurface surface;
-        readonly StackPanel notes = new StackPanel();
-        readonly StackPanel content = new StackPanel();
         readonly Button toggle;
         readonly StackPanel root;
         readonly TextBlock title;
@@ -35,7 +33,7 @@ namespace ReFix.QuickNote
             ThemeControls.Install(this);
             root = new StackPanel { Margin = new Thickness(10), AllowDrop = true };
             var header = new DockPanel { Background = Brushes.Transparent };
-            toggle = NoteWindow.Button("", Toggle);
+            toggle = NoteEditor.Button("›", () => controller.OpenList(list));
             toggle.Margin = new Thickness(0);
             toggle.Padding = new Thickness(5, 0, 5, 0);
             toggle.MinWidth = 20;
@@ -43,8 +41,24 @@ namespace ReFix.QuickNote
             header.Children.Add(toggle);
             title = new TextBlock { FontSize = 15, Margin = new Thickness(6, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Cursor = Cursors.SizeAll };
             title.ToolTip = "Перетащить список";
-            title.MouseLeftButtonDown += delegate
+            Point dragStart = new Point();
+            title.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e)
             {
+                dragStart=e.GetPosition(title); title.CaptureMouse(); e.Handled=true;
+            };
+            title.MouseLeftButtonUp += delegate(object sender, MouseButtonEventArgs e)
+            {
+                if (!title.IsMouseCaptured) return;
+                title.ReleaseMouseCapture();
+                if (title.IsMouseOver) controller.OpenList(list);
+                e.Handled=true;
+            };
+            title.MouseMove += delegate(object sender, MouseEventArgs e)
+            {
+                if (!title.IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed) return;
+                var at=e.GetPosition(title);
+                if (Math.Abs(at.X-dragStart.X)<SystemParameters.MinimumHorizontalDragDistance && Math.Abs(at.Y-dragStart.Y)<SystemParameters.MinimumVerticalDragDistance) return;
+                title.ReleaseMouseCapture();
                 controller.Run(delegate
                 {
                     DragMove();
@@ -58,14 +72,6 @@ namespace ReFix.QuickNote
             };
             header.Children.Add(title);
             root.Children.Add(header);
-            root.Children.Add(content);
-
-            content.Children.Add(new ScrollViewer { Content = notes, MaxHeight = 275, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-            var commands = new WrapPanel { Margin = new Thickness(0, 5, 0, 0) };
-            commands.Children.Add(NoteWindow.Button("+ Заметка", () => controller.NewNote(list)));
-            commands.Children.Add(NoteWindow.Button("+ Список", () => controller.NewList(this)));
-            content.Children.Add(commands);
-
             var menu = new ContextMenu { Resources = Resources };
             var rename = new MenuItem { Header = "Переименовать список…" };
             rename.Click += delegate { controller.RenameList(this, list); };
@@ -86,7 +92,7 @@ namespace ReFix.QuickNote
             {
                 if (disposed) return;
                 e.Cancel = true;
-                if (!list.Collapsed) Toggle();
+                Hide();
             };
         }
 
@@ -95,64 +101,14 @@ namespace ReFix.QuickNote
 
         internal void Refresh()
         {
-            title.Text = list.Name;
+            int count = library.Index.Notes.Count(n => n.ListId == list.Id);
+            title.Text = list.Name + " · " + count;
             Title = list.Name + " · Быстрая заметка";
-            toggle.Content = list.Collapsed ? "›" : "⌄";
-            toggle.ToolTip = list.Collapsed ? "Раскрыть заметки" : "Свернуть список";
-            Width = list.Collapsed ? 119 : 280;
-            root.Margin = new Thickness(list.Collapsed ? 4 : 10);
-            title.FontSize = list.Collapsed ? 12 : 15;
-            title.ToolTip = list.Name + " · перетащить список";
-            content.Visibility = list.Collapsed ? Visibility.Collapsed : Visibility.Visible;
-            notes.Children.Clear();
-            foreach (var note in library.Index.Notes.Where(n => n.ListId == list.Id))
-            {
-                var row = NoteWindow.Button("▤  " + note.Name, () => controller.Open(note));
-                row.HorizontalContentAlignment = HorizontalAlignment.Left;
-                row.ToolTip = note.Name;
-                row.ContextMenu = MoveMenu(note);
-                Point start = new Point();
-                row.PreviewMouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { start = e.GetPosition(row); };
-                row.PreviewMouseMove += delegate(object sender, MouseEventArgs e)
-                {
-                    if (e.LeftButton != MouseButtonState.Pressed || !row.IsMouseCaptured) return;
-                    var at = e.GetPosition(row);
-                    if (Math.Abs(at.X - start.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(at.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance) return;
-                    row.ReleaseMouseCapture();
-                    e.Handled = true;
-                    DragDrop.DoDragDrop(row, new DataObject(NoteFormat, note.Id), DragDropEffects.Move);
-                };
-                notes.Children.Add(row);
-            }
-            if (notes.Children.Count == 0) notes.Children.Add(new TextBlock { Text = "Нет заметок", Margin = new Thickness(6, 8, 0, 8), Opacity = .7 });
-        }
-
-        ContextMenu MoveMenu(NoteRecord note)
-        {
-            var menu = new ContextMenu { Resources = Resources };
-            var move = new MenuItem { Header = "Перенести в список" };
-            foreach (var target in library.Index.Lists.Where(l => l.Id != list.Id))
-            {
-                var item = new MenuItem { Header = target.Name };
-                item.Click += delegate { controller.Move(note.Id, target); };
-                move.Items.Add(item);
-            }
-            move.IsEnabled = move.Items.Count > 0;
-            menu.Items.Add(move);
-            return menu;
-        }
-
-        void Toggle()
-        {
-            controller.Run(delegate
-            {
-                list.Collapsed = !list.Collapsed;
-                try { library.Save(); }
-                catch { list.Collapsed = !list.Collapsed; throw; }
-                Refresh();
-                UpdateLayout();
-                RestorePosition();
-            });
+            Width = 145;
+            root.Margin = new Thickness(4);
+            title.FontSize = 12;
+            title.ToolTip = list.Name + " · " + count + " · перетащить список";
+            toggle.ToolTip = "Открыть список";
         }
 
         string DraggedNote(DragEventArgs e) { return e.Data.GetData(NoteFormat, false) as string; }

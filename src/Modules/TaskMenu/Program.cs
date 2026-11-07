@@ -30,8 +30,8 @@ namespace ReFix.TaskMenu
             this.app=app;this.themes=themes;this.controls=controls;this.topology=topology;store=new TaskMenuStore(Paths.Root);config=store.Load();
             try{if(new TaskMenuShortcuts(Paths.Root).Migrate(config))store.Save(config);}catch(Exception ex){if(!(ex is IOException||ex is UnauthorizedAccessException))throw;MessageBox.Show(ex.Message,"Не удалось сохранить копии ярлыков");}
             var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("Настроить панели…",null,delegate{app.Dispatcher.BeginInvoke(new Action(ShowSettings));});menu.Items.Add("Раскрыть / свернуть",null,delegate{app.Dispatcher.BeginInvoke(new Action(Toggle));});menu.Items.Add("Выключить меню задач",null,delegate{app.Dispatcher.BeginInvoke(new Action(app.Shutdown));});
-            tray=new System.Windows.Forms.NotifyIcon{Text="ReFIX · Меню задач v"+ProductInfo.Version,Icon=System.Drawing.SystemIcons.Application,ContextMenuStrip=menu,Visible=true};tray.DoubleClick+=delegate{app.Dispatcher.BeginInvoke(new Action(ShowSettings));};
-            miniTray=new MiniTrayClient(Paths.Root,"task-menu","Меню задач",ProductInfo.Version,tray,Toggle,delegate(int x,int y){menu.Show(x,y);},themes);
+            tray=new System.Windows.Forms.NotifyIcon{Text="ReFIX · Меню задач v"+ModuleVersions.TaskMenu,Icon=System.Drawing.SystemIcons.Application,ContextMenuStrip=menu,Visible=true};tray.DoubleClick+=delegate{app.Dispatcher.BeginInvoke(new Action(ShowSettings));};
+            miniTray=new MiniTrayClient(Paths.Root,"task-menu","Меню задач",ModuleVersions.TaskMenu,tray,Toggle,delegate(int x,int y){menu.Show(x,y);},themes);
             topology.Changed+=OnTopology;themes.Changed+=OnTheme;controls.Changed+=OnControls;environment=new DockEnvironment(topology.EventSource,controls,docks);Rebuild();
         }
         void OnTopology(object sender,EventArgs e){QueueRebuild();if(settings!=null){settings.Close();settings=null;ShowSettings();}}

@@ -1,4 +1,4 @@
-﻿param([switch]$Test,[switch]$BuildTests,[switch]$Package)
+﻿param([switch]$Test,[switch]$BuildTests,[switch]$Package,[switch]$PublishedPackages,[ValidateSet("quick-note","quiet-mixer","task-menu","mini-icons")][string]$OnlyModule)
 $ErrorActionPreference='Stop'
 $root=$PSScriptRoot
 if($Test){& (Join-Path $root 'tools\Verify-PowerShell.ps1') -Root $root}
@@ -16,6 +16,11 @@ function Compile([string]$target,[string[]]$files,[string[]]$extra){
 }
 $shared=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Shared') -Filter '*.cs'|ForEach-Object FullName)
 Compile 'ReFix.Shared.dll' $shared @('/target:library')
+if($OnlyModule){
+    & (Join-Path $root 'tools\Build-Modules.ps1') -Artifacts $out -Only $OnlyModule
+    if(!$?){throw 'Module build failed'}
+    return
+}
 $hub=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Hub') -Filter '*.cs'|ForEach-Object FullName)
 $engine=Join-Path $root 'src\UpdateHelper\UpdateEngine.cs'
 $bootstrap=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Bootstrap') -Filter '*.cs'|ForEach-Object FullName)
@@ -24,12 +29,15 @@ $helper=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\UpdateHelper') -Filte
 Compile 'ReFix.UpdateHelper.exe' $helper @('/target:winexe',('/win32manifest:'+(Join-Path $root 'app.manifest')))
 Copy-Item -LiteralPath (Join-Path $root 'HUB-ReFIX.exe.config') -Destination $out -Force
 Copy-Item -LiteralPath (Join-Path $root 'HUB-ReFIX.Core.exe.config') -Destination $out -Force
-& (Join-Path $root 'tools\Build-Modules.ps1') -Artifacts $out
+& (Join-Path $root 'tools\Build-Modules.ps1') -Artifacts $out -PublishedPackages:$PublishedPackages
 if($LASTEXITCODE -ne 0){throw 'Module build failed'}
 $versionText=Get-Content -LiteralPath (Join-Path $root 'src\Shared\ProductInfo.cs') -Raw
 if($versionText -notmatch 'public const string Version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"'){throw 'Missing canonical product version'}
-$menuResource='/resource:'+(Join-Path $out ('packages\task-menu-'+$Matches[1]+'.zip'))+',ReFix.TaskMenu.zip'
-$miniResource='/resource:'+(Join-Path $out ('packages\mini-icons-'+$Matches[1]+'.zip'))+',ReFix.MiniIcons.zip'
+$moduleCatalog=Get-Content -LiteralPath (Join-Path $out 'catalog.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$menuVersion=($moduleCatalog.Modules | Where-Object { $_.Id -ceq 'task-menu' }).Version
+$miniVersion=($moduleCatalog.Modules | Where-Object { $_.Id -ceq 'mini-icons' }).Version
+$menuResource='/resource:'+(Join-Path $out ('packages\task-menu-'+$menuVersion+'.zip'))+',ReFix.TaskMenu.zip'
+$miniResource='/resource:'+(Join-Path $out ('packages\mini-icons-'+$miniVersion+'.zip'))+',ReFix.MiniIcons.zip'
 Compile 'HUB-ReFIX.Core.exe' @($hub+$engine) @('/target:winexe',('/win32icon:'+(Join-Path $root 'assets\icons\hub.ico')),('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),('/win32manifest:'+(Join-Path $root 'app.manifest')),$menuResource,$miniResource)
 if($Test -or $BuildTests){
     Compile 'ThemeLazy.Tests.exe' @((Join-Path $root 'tests\ThemeLoadTests.cs')) @('/target:exe','/main:ReFix.Tests.ThemeLoadTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
