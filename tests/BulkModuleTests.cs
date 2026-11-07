@@ -34,12 +34,19 @@ namespace ReFix.Tests
                 {
                     var hub=new HubWindow(themes,manager,controls);try
                     {
+                        var enable=Field<Button>(hub,"batchEnable");var disable=Field<Button>(hub,"batchDisable");
                         var all=Field<CheckBox>(hub,"selectAll");var install=Field<Button>(hub,"batchInstall");var update=Field<Button>(hub,"batchUpdate");var remove=Field<Button>(hub,"batchRemove");var cards=Field<List<ModuleCard>>(hub,"views");
-                        report("empty selection disables all batch actions",all.IsChecked==false&&!install.IsEnabled&&!update.IsEnabled&&!remove.IsEnabled);
+                        report("empty selection disables all batch actions",all.IsChecked==false&&!install.IsEnabled&&!update.IsEnabled&&!remove.IsEnabled&&!enable.IsEnabled&&!disable.IsEnabled);
                         Click(Field<CheckBox>(cards[0],"selection"));report("single selection fills aggregate square",all.IsChecked==null&&install.IsEnabled&&!update.IsEnabled&&!remove.IsEnabled);
                         Click(all);report("aggregate click selects every visible card",all.IsChecked==true&&cards.All(c=>c.IsSelected));
                         foreach(var view in manager.Modules)view.UpdateState("OFF",view.Manifest.Version,root);Pump();
                         report("fully installed current selection disables install and update",Convert.ToString(install.Content)=="Установлено"&&!install.IsEnabled&&!update.IsEnabled&&remove.IsEnabled);
+                        report("all stopped enables only batch start",enable.IsEnabled&&!disable.IsEnabled);
+                        cards[0].View.UpdateState("ON",cards[0].View.Manifest.Version,root);Pump();
+                        report("mixed running state enables both batch power actions",enable.IsEnabled&&disable.IsEnabled);
+                        foreach(var view in manager.Modules)view.UpdateState("ON",view.Manifest.Version,root);Pump();
+                        report("all running enables only batch stop",!enable.IsEnabled&&disable.IsEnabled);
+                        cards[0].View.UpdateState("OFF",cards[0].View.Manifest.Version,root);
                         cards[0].View.InstalledVersion="0.0.1";Pump();report("available update enables group update for stopped modules",update.IsEnabled);
                         Click(all);report("aggregate clears selection",all.IsChecked==false&&!install.IsEnabled&&!update.IsEnabled&&!remove.IsEnabled);
                         var search=Field<TextBox>(hub,"search");search.Text=cards[0].View.Manifest.Name;Click(all);report("select all applies to current filtered list",all.IsChecked==true&&cards.Where(c=>c.Visibility==Visibility.Visible).All(c=>c.IsSelected)&&cards.Where(c=>c.Visibility!=Visibility.Visible).All(c=>!c.IsSelected));

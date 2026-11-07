@@ -11,8 +11,8 @@ namespace ReFix.TaskMenu
 {
     internal sealed class MonitorInfo
     {
-        internal string Id;internal Rect Bounds,Work;internal double Scale;internal HashSet<TaskMenuEdge> Forbidden=new HashSet<TaskMenuEdge>();
-        public override string ToString(){return Id+" ("+(int)Bounds.Width+" × "+(int)Bounds.Height+")";}
+        internal string Id,Name;internal int Number;internal Rect Bounds,Work;internal double Scale;internal HashSet<TaskMenuEdge> Forbidden=new HashSet<TaskMenuEdge>();
+        public override string ToString(){return "Экран "+Number+" · "+(String.IsNullOrEmpty(Name)?"Монитор":Name)+" ("+(int)Bounds.Width+" × "+(int)Bounds.Height+")";}
     }
     internal sealed class Topology : IDisposable
     {
@@ -25,7 +25,48 @@ namespace ReFix.TaskMenu
         IntPtr Message(IntPtr h,int msg,IntPtr w,IntPtr l,ref bool handled){if(msg==0x007E||msg==0x001A||msg==0x02E0||(uint)msg==taskbarCreated)Schedule();return IntPtr.Zero;}
         void Refresh(){if(disposed)return;var monitors=new List<MonitorInfo>();Native.EnumDisplayMonitors(IntPtr.Zero,IntPtr.Zero,delegate(IntPtr h,IntPtr dc,ref Native.RECT rect,IntPtr data){var info=new Native.MONITORINFOEX();info.cbSize=Marshal.SizeOf(info);if(Native.GetMonitorInfo(h,ref info)){uint x=96,y=96;try{Native.GetDpiForMonitor(h,0,out x,out y);}catch(DllNotFoundException){}catch(EntryPointNotFoundException){}monitors.Add(new MonitorInfo{Id=info.szDevice,Bounds=info.rcMonitor.ToRect(),Work=info.rcWork.ToRect(),Scale=x/96.0});}return true;},IntPtr.Zero);
             Native.EnumWindows(delegate(IntPtr window,IntPtr data){var name=new StringBuilder(128);Native.GetClassName(window,name,name.Capacity);if(name.ToString()=="Shell_TrayWnd"||name.ToString()=="Shell_SecondaryTrayWnd"){Native.RECT r;if(Native.GetWindowRect(window,out r))foreach(var m in monitors){var edge=TaskMenuGeometry.TaskbarEdge(m.Bounds,r.ToRect());if(edge.HasValue)m.Forbidden.Add(edge.Value);}}return true;},IntPtr.Zero);
+            int fallback=1;
+            foreach(var monitor in monitors)
+            {
+                int number;
+                int start=monitor.Id.LastIndexOf("DISPLAY",StringComparison.OrdinalIgnoreCase);
+                monitor.Number=start>=0&&Int32.TryParse(monitor.Id.Substring(start+7),out number)?number:fallback;
+                monitor.Name=MonitorName(monitor.Id);
+                fallback++;
+            }
+            monitors.Sort((a,b)=>a.Number.CompareTo(b.Number));
             Monitors=monitors;var changed=Changed;if(changed!=null)changed(this,EventArgs.Empty);
+        }
+        static string MonitorName(string display)
+        {
+            for(uint index=0;;index++)
+            {
+                var device=new Native.DISPLAY_DEVICE{Size=Marshal.SizeOf(typeof(Native.DISPLAY_DEVICE))};
+                if(!Native.EnumDisplayDevices(display,index,ref device,1))return null;
+                if((device.Flags&1)==0)continue;
+                string[] path=(device.Id??"").Split('#');
+                if(path.Length>=3)
+                {
+                    try
+                    {
+                        using(var key=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\DISPLAY\"+path[1]+@"\"+path[2]+@"\Device Parameters"))
+                        {
+                            var edid=key==null?null:key.GetValue("EDID") as byte[];
+                            if(edid!=null&&edid.Length>=128)
+                                for(int offset=54;offset<=108;offset+=18)
+                                    if(edid[offset]==0&&edid[offset+1]==0&&edid[offset+2]==0&&edid[offset+3]==0xFC)
+                                    {
+                                        string name=Encoding.ASCII.GetString(edid,offset+5,13).Trim(' ','\0','\r','\n');
+                                        if(name.Length>0)return name;
+                                    }
+                        }
+                    }
+                    catch(System.Security.SecurityException){}
+                    catch(UnauthorizedAccessException){}
+                    catch(System.IO.IOException){}
+                }
+                return device.Name;
+            }
         }
         public void Dispose(){disposed=true;pending.Stop();source.RemoveHook(Message);if(hook!=IntPtr.Zero)Native.UnhookWinEvent(hook);}
     }
@@ -33,6 +74,17 @@ namespace ReFix.TaskMenu
     {
         [StructLayout(LayoutKind.Sequential)]internal struct RECT{public int Left,Top,Right,Bottom;internal Rect ToRect(){return new Rect(Left,Top,Math.Max(0,Right-Left),Math.Max(0,Bottom-Top));}}
         [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]internal struct MONITORINFOEX{public int cbSize;public RECT rcMonitor,rcWork;public uint flags;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)]public string szDevice;}
+        [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]
+        internal struct DISPLAY_DEVICE
+        {
+            public int Size;
+            [MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)]public string DeviceName;
+            [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string Name;
+            public uint Flags;
+            [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string Id;
+            [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string Key;
+        }
+        [DllImport("user32.dll",CharSet=CharSet.Unicode)]internal static extern bool EnumDisplayDevices(string display,uint index,ref DISPLAY_DEVICE device,uint flags);
         internal delegate bool MonitorEnum(IntPtr monitor,IntPtr dc,ref RECT rect,IntPtr data);
         internal delegate bool WindowEnum(IntPtr window,IntPtr data);
         internal delegate void WinEvent(IntPtr hook,uint ev,IntPtr window,int obj,int child,uint thread,uint time);

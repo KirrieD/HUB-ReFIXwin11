@@ -11,6 +11,11 @@ namespace ReFix.Tests{
     int click=0,right=0;using(var client=new MiniTrayClient(root,"hub","HUB fixture",ProductInfo.Version,tray,()=>click++, (x,y)=>right++,global))using(var mixer=new MiniTrayClient(root,"quiet-mixer","Mixer fixture",ProductInfo.Version,mixerTray,()=>{},(x,y)=>{},global)){
      var controller=new Controller(app,themes,controls,topology);try{
       Pump();Check("ready container publishes a live verified host",MiniTrayFiles.ReadHost(root)!=null);Check("ready container hides first-party system tray icons",!tray.Visible&&!mixerTray.Visible);Check("arrow stays outside Windows taskbar and Alt-Tab",controller.Edge.IsVisible&&DockPresentation.IsToolWindow(controller.Edge.Handle));
+      var behavior=controls.Current;behavior.MiniIconsLayer=TaskMenuLayer.BelowWindows;controls.Save(behavior);Pump(150);
+      Check("Mini Icons layer updates the native arrow and popup live",!DockPresentation.IsTopmost(controller.Edge.Handle)&&!controller.Popup.Topmost);
+      behavior.MiniIconsLayer=TaskMenuLayer.AboveAll;controls.Save(behavior);Pump(150);
+      Check("always on top restores both Mini Icons surfaces",DockPresentation.IsTopmost(controller.Edge.Handle)&&controller.Popup.Topmost);
+      Check("screen labels expose a number and hide the technical display path",topology.Monitors.All(m=>m.Number>0&&m.ToString().StartsWith("Экран "+m.Number+" · ")&&!m.ToString().Contains(m.Id)));
       controller.ShowPopup();var opening=controller.Popup.GetType().GetProperty("IsOpening",BindingFlags.Instance|BindingFlags.NonPublic);Check("popup opens with animation unless Windows disables motion",!SystemParameters.ClientAreaAnimation||(opening!=null&&(bool)opening.GetValue(controller.Popup,null)));Pump(800);Check("opening animation releases its idle state",opening!=null&&!(bool)opening.GetValue(controller.Popup,null));
       Check("mini popup opens with only the two live application icons",controller.Popup.IsVisible&&!controller.Edge.IsVisible&&Find<UniformGrid>(controller.Popup,g=>true).Children.Count==2);Check("third-party separator is hidden initially",Find<Button>(controller.Popup,b=>Convert.ToString(b.ToolTip)=="Скрытые значки Windows").Visibility==Visibility.Collapsed);
       controller.Toggle();Pump();Check("closing popup restores arrow",!controller.Popup.IsVisible&&controller.Edge.IsVisible);controller.ShowPopup();Pump();

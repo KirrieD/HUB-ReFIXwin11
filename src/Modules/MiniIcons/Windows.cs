@@ -40,7 +40,7 @@ namespace ReFix.MiniIcons
         internal void ApplyTheme(ThemeProfile value){surface.Apply(this,value);}
         double? alignedY;
         internal void AlignToPopup(MonitorInfo monitor,Rect popup){alignedY=popup.Top+(popup.Height-40*monitor.Scale)/2;Place(monitor);}
-        internal void Place(MonitorInfo monitor){Rect r=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);if(alignedY.HasValue)r.Y=Math.Max(monitor.Work.Top,Math.Min(alignedY.Value,monitor.Work.Bottom-r.Height));Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,Math.Max(1,(int)r.Width),Math.Max(1,(int)r.Height),0x10);}
+        internal void Place(MonitorInfo monitor){Rect r=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);if(alignedY.HasValue)r.Y=Math.Max(monitor.Work.Top,Math.Min(alignedY.Value,monitor.Work.Bottom-r.Height));Native.SetWindowPos(Handle,IntPtr.Zero,(int)r.X,(int)r.Y,Math.Max(1,(int)r.Width),Math.Max(1,(int)r.Height),0x14);}
     }
     internal sealed class PopupWindow:Window
     {
@@ -102,6 +102,6 @@ namespace ReFix.MiniIcons
             var motion=new DoubleAnimation(horizontal?x:y,target,TimeSpan.FromMilliseconds(duration)){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseIn},FillBehavior=FillBehavior.HoldEnd};motion.Completed+=delegate{if(revision==motionRevision)Hide();};slide.BeginAnimation(horizontal?TranslateTransform.XProperty:TranslateTransform.YProperty,motion);surface.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(opacity,0,TimeSpan.FromMilliseconds(duration)));
         }
         void ResetOpening(){motionRevision++;IsOpening=false;IsClosing=false;slide.BeginAnimation(TranslateTransform.XProperty,null);slide.BeginAnimation(TranslateTransform.YProperty,null);surface.BeginAnimation(UIElement.OpacityProperty,null);slide.X=slide.Y=0;surface.Opacity=1;}
-        internal void Place(MonitorInfo monitor,EdgeWindow edge){Rect anchor=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);double scale=Math.Max(.5,monitor.Scale);MaxHeight=Math.Max(1,monitor.Work.Height/scale);UpdateLayout();Rect r=MiniIconsGeometry.Popup(monitor.Bounds,monitor.Work,anchor,new Size((ActualWidth>0?ActualWidth:Width)*scale,(IsVisible&&ActualHeight>0?ActualHeight:Math.Ceiling((double)Math.Max(1,entries.Count)/Math.Max(1,icons.Columns))*((config==null?16:config.IconSize)+8)+20+(config!=null&&config.ShowWindowsTray?33:0))*scale),6*scale);Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,(int)r.Width,(int)r.Height,0x10);edge.AlignToPopup(monitor,r);}
+        internal void Place(MonitorInfo monitor,EdgeWindow edge){Rect anchor=MiniIconsGeometry.Edge(monitor.Bounds,monitor.Work,monitor.Scale);double scale=Math.Max(.5,monitor.Scale);MaxHeight=Math.Max(1,monitor.Work.Height/scale);UpdateLayout();Rect r=MiniIconsGeometry.Popup(monitor.Bounds,monitor.Work,anchor,new Size((ActualWidth>0?ActualWidth:Width)*scale,(IsVisible&&ActualHeight>0?ActualHeight:Math.Ceiling((double)Math.Max(1,entries.Count)/Math.Max(1,icons.Columns))*((config==null?16:config.IconSize)+8)+20+(config!=null&&config.ShowWindowsTray?33:0))*scale),6*scale);Native.SetWindowPos(Handle,new IntPtr(-1),(int)r.X,(int)r.Y,(int)r.Width,(int)r.Height,0x14);edge.AlignToPopup(monitor,r);}
     }
 }

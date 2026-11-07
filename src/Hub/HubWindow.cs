@@ -36,7 +36,7 @@ namespace ReFix.Hub
         private readonly HashSet<string> selected=new HashSet<string>(StringComparer.Ordinal);
         private readonly CheckBox selectAll=SelectionUi.Create("Выбрать все инструменты текущего списка");
         private readonly TextBlock selectionCount=Ui.Text("",12,"Hub.Muted");
-        private Button batchInstall,batchUpdate,batchRemove;
+        private Button batchInstall,batchUpdate,batchRemove,batchEnable,batchDisable;
         private string filter="all";
         internal HubWindow(ThemeStore store,ModuleManager modules,ControlsStore bindings=null,Action checkUpdates=null)
         {
@@ -71,7 +71,9 @@ namespace ReFix.Hub
             selectAll.Content="Все";selectAll.IsThreeState=true;selectAll.Margin=new Thickness(0,8,14,8);selectAll.ToolTip="Выбрать или снять выбор со всех инструментов текущего списка";bulk.Children.Add(selectAll);
             selectAll.Click+=delegate{var visible=VisibleCards();bool choose=!visible.All(c=>selected.Contains(c.View.Manifest.Id));foreach(var card in visible){if(choose)selected.Add(card.View.Manifest.Id);else selected.Remove(card.View.Manifest.Id);card.IsSelected=choose;}RefreshBulk();};
             batchInstall=Ui.Button("Установить",delegate{Run(()=>RunBatch(BulkOperation.Install));},false);batchUpdate=Ui.Button("Обновить",delegate{Run(()=>RunBatch(BulkOperation.Update));},true);batchRemove=Ui.Button("Удалить",delegate{Run(()=>RunBatch(BulkOperation.Remove));},false);
-            foreach(var button in new[]{batchInstall,batchUpdate,batchRemove}){button.Margin=new Thickness(0,0,8,0);bulk.Children.Add(button);}
+            batchEnable=Ui.Button("Включить",delegate{Run(()=>RunBatch(BulkOperation.Enable));},true);
+            batchDisable=Ui.Button("Выключить",delegate{Run(()=>RunBatch(BulkOperation.Disable));},true);
+            foreach(var button in new[]{batchInstall,batchUpdate,batchRemove,batchEnable,batchDisable}){button.Margin=new Thickness(0,0,8,0);bulk.Children.Add(button);}
             selectionCount.VerticalAlignment=VerticalAlignment.Center;selectionCount.Margin=new Thickness(0,8,0,8);bulk.Children.Add(selectionCount);
             ScrollViewer scroll=new ScrollViewer { Content=cards,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Padding=new Thickness(0,0,8,0) }; Grid.SetRow(scroll,3); main.Children.Add(scroll);
             Grid footer=new Grid { Margin=new Thickness(20,8,22,12) };footer.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});footer.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});Grid.SetRow(footer,2);Grid.SetColumnSpan(footer,2);shell.Children.Add(footer);
@@ -167,6 +169,8 @@ namespace ReFix.Hub
             bool install=chosen.Any(v=>BulkModuleActions.Eligible(v,BulkOperation.Install));
             batchInstall.Content=chosen.Length>0&&chosen.All(v=>!String.IsNullOrEmpty(v.InstalledVersion))?"Установлено":"Установить";
             BulkButton(batchInstall,ready&&install,false);BulkButton(batchUpdate,ready&&chosen.Any(v=>BulkModuleActions.Eligible(v,BulkOperation.Update)),true);BulkButton(batchRemove,ready&&chosen.Any(v=>BulkModuleActions.Eligible(v,BulkOperation.Remove)),false);
+            BulkButton(batchEnable,ready&&chosen.Any(v=>BulkModuleActions.Eligible(v,BulkOperation.Enable)),true);
+            BulkButton(batchDisable,ready&&chosen.Any(v=>BulkModuleActions.Eligible(v,BulkOperation.Disable)),true);
             cards.IsEnabled=!batchBusy;
         }
         private static void BulkButton(Button button,bool enabled,bool accent){button.IsEnabled=enabled;button.SetResourceReference(Control.BackgroundProperty,enabled&&accent?"Hub.Accent":"Hub.Surface");button.SetResourceReference(Control.ForegroundProperty,enabled?accent?"Hub.AccentText":"Hub.Foreground":"Hub.Muted");}
@@ -176,10 +180,10 @@ namespace ReFix.Hub
             var targets=VisibleCards().Where(c=>selected.Contains(c.View.Manifest.Id)).Select(c=>c.View).ToArray();if(targets.Any(v=>v.IsBusy))return;targets=targets.Where(v=>BulkModuleActions.Eligible(v,operation)).ToArray();if(targets.Length==0)return;
             if(operation==BulkOperation.Remove&&MessageBox.Show(this,"Удалить выбранные утилиты ("+targets.Length+")?\n\n"+String.Join("\n",targets.Select(v=>"• "+v.Manifest.Name))+"\n\nРаботающие утилиты будут остановлены. Личные данные и оформление сохранятся.","Удаление утилит",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
             batchBusy=true;RefreshBulk();
-            string title=operation==BulkOperation.Install?"Установка":operation==BulkOperation.Update?"Обновление":"Удаление";
+            string title=operation==BulkOperation.Install?"Установка":operation==BulkOperation.Update?"Обновление":operation==BulkOperation.Enable?"Включение":operation==BulkOperation.Disable?"Выключение":"Удаление";
             try
             {
-                var result=await BulkModuleActions.RunAsync(targets,operation,async delegate(ModuleView view){if(operation==BulkOperation.Install)await manager.InstallAsync(view);else if(operation==BulkOperation.Update)await manager.UpdateAsync(view);else{await manager.UninstallAsync(view);ClearStartup(controls,view.Manifest.Id);}},delegate(ModuleView view,int index,int count){SetNotice(title+" "+index+" из "+count+": "+view.Manifest.Name+"…");});
+                var result=await BulkModuleActions.RunAsync(targets,operation,async delegate(ModuleView view){if(operation==BulkOperation.Install)await manager.InstallAsync(view);else if(operation==BulkOperation.Update)await manager.UpdateAsync(view);else if(operation==BulkOperation.Enable)await manager.StartAsync(view);else if(operation==BulkOperation.Disable)await manager.StopAsync(view);else{await manager.UninstallAsync(view);ClearStartup(controls,view.Manifest.Id);}},delegate(ModuleView view,int index,int count){SetNotice(title+" "+index+" из "+count+": "+view.Manifest.Name+"…");});
                 SetNotice(title+": выполнено "+result.Completed+" из "+targets.Length+(result.Errors.Count==0?".":". Ошибки: "+String.Join("; ",result.Errors)));
             }
             finally{batchBusy=false;Filter();}

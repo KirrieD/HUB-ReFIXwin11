@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using ReFix.Shared;
@@ -24,15 +24,27 @@ namespace ReFix.TaskMenu
         }
         static Button Button(string title,Action action){var b=new Button{Content=title,Margin=new Thickness(0,0,8,0),Padding=new Thickness(12,6,12,6)};b.Click+=delegate{action();};return b;}
         static void AddField(Panel body,string title,Control control){System.Windows.Automation.AutomationProperties.SetName(control,title);var row=new Grid{Margin=new Thickness(0,0,0,8)};row.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(190)});row.ColumnDefinitions.Add(new ColumnDefinition());row.Children.Add(new TextBlock{Text=title,VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(control,1);row.Children.Add(control);body.Children.Add(row);}
-        void Reload(){string selected=panels.SelectedItem is TaskMenuPanel?((TaskMenuPanel)panels.SelectedItem).Id:null;panels.Items.Clear();foreach(var p in config.Panels){panels.Items.Add(p);if(p.Id==selected)panels.SelectedItem=p;}if(panels.SelectedIndex<0&&panels.Items.Count>0)panels.SelectedIndex=0;if(panels.Items.Count==0&&monitors.Items.Count>0){monitors.SelectedIndex=0;RefreshEdges();}status.Text="Панелей: "+config.Panels.Count;}
-        void LoadSelection(){var p=panels.SelectedItem as TaskMenuPanel;if(p==null)return;loading=true;monitors.SelectedIndex=-1;foreach(MonitorInfo m in monitors.Items)if(String.Equals(m.Id,p.Monitor,StringComparison.OrdinalIgnoreCase)){monitors.SelectedItem=m;break;}columns.Text=p.Columns.ToString();rows.Text=p.Rows.ToString();size.Text=p.IconSize.ToString();width.Text=TaskMenuGrid.Width(p).ToString();RefreshEdges();if(edges.Items.Contains(p.Edge))edges.SelectedItem=p.Edge;else status.Text="Панель приостановлена: экран отключён или эта сторона занята панелью задач. Выберите доступное размещение.";loading=false;}
+        TaskMenuPanel SelectedPanel{get{var item=panels.SelectedItem as ListBoxItem;return item==null?null:(TaskMenuPanel)item.Tag;}}
+        void Reload(TaskMenuPanel preferred=null)
+        {
+            var selected=preferred??SelectedPanel;
+            panels.Items.Clear();
+            foreach(var p in config.Panels)
+            {
+                var monitor=topology.Monitors.FirstOrDefault(m=>String.Equals(m.Id,p.Monitor,StringComparison.OrdinalIgnoreCase));
+                var item=new ListBoxItem{Tag=p,Content=(monitor==null?"Отключённый экран":monitor.ToString())+" · "+p.Edge+" · "+p.Items.Count+" элементов"};
+                panels.Items.Add(item);
+                if(p==selected)panels.SelectedItem=item;
+            }
+            if(panels.SelectedIndex<0&&panels.Items.Count>0)panels.SelectedIndex=0;if(panels.Items.Count==0&&monitors.Items.Count>0){monitors.SelectedIndex=0;RefreshEdges();}status.Text="Панелей: "+config.Panels.Count;}
+        void LoadSelection(){var p=SelectedPanel;if(p==null)return;loading=true;monitors.SelectedIndex=-1;foreach(MonitorInfo m in monitors.Items)if(String.Equals(m.Id,p.Monitor,StringComparison.OrdinalIgnoreCase)){monitors.SelectedItem=m;break;}columns.Text=p.Columns.ToString();rows.Text=p.Rows.ToString();size.Text=p.IconSize.ToString();width.Text=TaskMenuGrid.Width(p).ToString();RefreshEdges();if(edges.Items.Contains(p.Edge))edges.SelectedItem=p.Edge;else status.Text="Панель приостановлена: экран отключён или эта сторона занята панелью задач. Выберите доступное размещение.";loading=false;}
         void RefreshEdges(){bool wasLoading=loading;loading=true;try{object selected=edges.SelectedItem;edges.Items.Clear();var m=monitors.SelectedItem as MonitorInfo;if(m==null)return;foreach(TaskMenuEdge e in Enum.GetValues(typeof(TaskMenuEdge)))if(!m.Forbidden.Contains(e))edges.Items.Add(e);if(selected!=null&&edges.Items.Contains(selected))edges.SelectedItem=selected;else if(edges.Items.Count>0)edges.SelectedIndex=0;}finally{loading=wasLoading;}}
         bool Placement(TaskMenuPanel current,out MonitorInfo monitor,out TaskMenuEdge edge){monitor=monitors.SelectedItem as MonitorInfo;edge=edges.SelectedItem is TaskMenuEdge?(TaskMenuEdge)edges.SelectedItem:TaskMenuEdge.Left;if(monitor==null||edges.SelectedItem==null){status.Text="Выберите подключённый экран и доступную сторону.";return false;}int count=0;foreach(var p in config.Panels){if(p==current||!String.Equals(p.Monitor,monitor.Id,StringComparison.OrdinalIgnoreCase))continue;count++;if(p.Edge==edge){status.Text="На этой стороне уже есть панель.";return false;}}if(count>=3){status.Text="На одном экране может быть не более трёх панелей.";return false;}return true;}
-        void NewPanel(){MonitorInfo m;TaskMenuEdge edge;if(!Placement(null,out m,out edge))return;var panel=new TaskMenuPanel{Monitor=m.Id,Edge=edge,Columns=edge==TaskMenuEdge.Left||edge==TaskMenuEdge.Right?1:4};config.Panels.Add(panel);save();Reload();panels.SelectedItem=panel;}
-        void Delete(){var p=panels.SelectedItem as TaskMenuPanel;if(p==null)return;config.Panels.Remove(p);save();Reload();}
+        void NewPanel(){MonitorInfo m;TaskMenuEdge edge;if(!Placement(null,out m,out edge))return;var panel=new TaskMenuPanel{Monitor=m.Id,Edge=edge,Columns=edge==TaskMenuEdge.Left||edge==TaskMenuEdge.Right?1:4};config.Panels.Add(panel);save();Reload(panel);}
+        void Delete(){var p=SelectedPanel;if(p==null)return;config.Panels.Remove(p);save();Reload();}
         void UpdateWidth(){int c,s;if(!Int32.TryParse(columns.Text,out c)||!Int32.TryParse(size.Text,out s)||c<1||c>12||s<14||s>28)return;loading=true;width.Text=(c*(s+16)+28).ToString();loading=false;}
-        void OrientFields(){var p=panels.SelectedItem as TaskMenuPanel;if(p==null||!(edges.SelectedItem is TaskMenuEdge)||(TaskMenuEdge)edges.SelectedItem==p.Edge)return;bool vertical=(TaskMenuEdge)edges.SelectedItem==TaskMenuEdge.Left||(TaskMenuEdge)edges.SelectedItem==TaskMenuEdge.Right;loading=true;columns.Text=(vertical?1:Math.Max(1,Math.Min(12,p.Items.Count))).ToString();rows.Text=(vertical?Math.Max(1,p.Items.Count):Math.Max(1,(p.Items.Count+11)/12)).ToString();loading=false;UpdateWidth();}
-        void Apply(){var p=panels.SelectedItem as TaskMenuPanel;if(p==null){status.Text="Сначала создайте панель.";return;}MonitorInfo m;TaskMenuEdge edge;if(!Placement(p,out m,out edge))return;int c,r,s,w;if(!Int32.TryParse(columns.Text,out c)||c<1||c>12||!Int32.TryParse(rows.Text,out r)||r<1||r>512||!Int32.TryParse(size.Text,out s)||s<14||s>28||!Int32.TryParse(width.Text,out w)||w<=0){status.Text="Столбцы: 1–12; строки: 1–512; значки: 14–28; ширина — положительное число.";return;}p.Monitor=m.Id;p.Edge=edge;p.IconSize=s;TaskMenuGrid.Configure(p,c,r);save();Reload();status.Text="Сетка "+p.Columns+" × "+p.Rows+" · ширина "+TaskMenuGrid.Width(p)+" px";}
+        void OrientFields(){var p=SelectedPanel;if(p==null||!(edges.SelectedItem is TaskMenuEdge)||(TaskMenuEdge)edges.SelectedItem==p.Edge)return;bool vertical=(TaskMenuEdge)edges.SelectedItem==TaskMenuEdge.Left||(TaskMenuEdge)edges.SelectedItem==TaskMenuEdge.Right;loading=true;columns.Text=(vertical?1:Math.Max(1,Math.Min(12,p.Items.Count))).ToString();rows.Text=(vertical?Math.Max(1,p.Items.Count):Math.Max(1,(p.Items.Count+11)/12)).ToString();loading=false;UpdateWidth();}
+        void Apply(){var p=SelectedPanel;if(p==null){status.Text="Сначала создайте панель.";return;}MonitorInfo m;TaskMenuEdge edge;if(!Placement(p,out m,out edge))return;int c,r,s,w;if(!Int32.TryParse(columns.Text,out c)||c<1||c>12||!Int32.TryParse(rows.Text,out r)||r<1||r>512||!Int32.TryParse(size.Text,out s)||s<14||s>28||!Int32.TryParse(width.Text,out w)||w<=0){status.Text="Столбцы: 1–12; строки: 1–512; значки: 14–28; ширина — положительное число.";return;}p.Monitor=m.Id;p.Edge=edge;p.IconSize=s;TaskMenuGrid.Configure(p,c,r);save();Reload();status.Text="Сетка "+p.Columns+" × "+p.Rows+" · ширина "+TaskMenuGrid.Width(p)+" px";}
         internal void ApplyTheme(ThemeProfile theme){surface.Apply(this,theme);}
     }
 }

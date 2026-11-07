@@ -27,7 +27,7 @@ foreach ($module in $modules) {
     $stage = Join-Path $Artifacts ('module-build\' + $module.Id)
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     $sources = @(Get-ChildItem -LiteralPath (Join-Path $root ('src\Modules\' + $module.Source)) -Filter '*.cs' | ForEach-Object FullName)
-    if ($module.Id -eq 'mini-icons') { $sources += (Join-Path $root 'src\Modules\TaskMenu\Topology.cs'),(Join-Path $root 'src\Modules\TaskMenu\DockPresentation.cs') }
+    if ($module.Id -eq 'mini-icons') { $sources += (Join-Path $root 'src\Modules\TaskMenu\Topology.cs'),(Join-Path $root 'src\Modules\TaskMenu\DockPresentation.cs'),(Join-Path $root 'src\Modules\TaskMenu\DockStacking.cs') }
     $sources += Join-Path $root 'src\Modules\ThemedSurface.cs'
     $manifest = Join-Path $root 'src\Modules\app.manifest'
     & $compiler /nologo /utf8output /langversion:5 /target:winexe /optimize+ /platform:anycpu "/win32manifest:$manifest" ("/win32icon:"+(Join-Path $root ("assets\icons\"+$module.Id+".ico"))) "/out:$stage\$($module.Exe)" @refs @sources

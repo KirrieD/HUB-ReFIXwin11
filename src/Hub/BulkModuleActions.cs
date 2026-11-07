@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 namespace ReFix.Hub
 {
-    internal enum BulkOperation { Install, Update, Remove }
+    internal enum BulkOperation { Install, Update, Remove, Enable, Disable }
     internal sealed class BulkResult
     {
         internal int Completed,Skipped;
@@ -18,6 +18,8 @@ namespace ReFix.Hub
             bool installed=!String.IsNullOrEmpty(view.InstalledVersion);
             if(operation==BulkOperation.Install)return !installed&&view.State=="NO";
             if(operation==BulkOperation.Remove)return installed;
+            if(operation==BulkOperation.Enable)return installed&&view.State=="OFF";
+            if(operation==BulkOperation.Disable)return installed&&view.State=="ON";
             Version available,current;return installed&&Version.TryParse(view.Manifest.Version,out available)&&Version.TryParse(view.InstalledVersion,out current)&&available>current;
         }
         internal static bool? SelectionState(int selected,int total){return selected==0?false:selected==total?(bool?)true:null;}

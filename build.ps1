@@ -45,7 +45,7 @@ if($Test -or $BuildTests){
     Compile 'MiniIcons.External.Tests.exe' @((Join-Path $root 'src\Modules\MiniIcons\ExternalWindowsOverflow.cs'),(Join-Path $root 'tests\MiniIconsExternalTests.cs')) @('/target:exe','/define:MINI_ICONS_EXTERNAL_FIXTURE','/main:ReFix.Tests.MiniIconsExternalTests')
     Compile 'MiniTrayClient.Tests.exe' @((Join-Path $root 'tests\MiniTrayClientTests.cs')) @('/target:exe','/define:MINI_TRAY_CLIENT_FIXTURE','/main:ReFix.Tests.MiniTrayClientTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
     $miniUi=@(Get-ChildItem -LiteralPath (Join-Path $root 'src\Modules\MiniIcons') -Filter '*.cs'|ForEach-Object FullName)
-    $miniUi+=(Join-Path $root 'src\Modules\TaskMenu\Topology.cs'),(Join-Path $root 'src\Modules\TaskMenu\DockPresentation.cs'),(Join-Path $root 'src\Modules\ThemedSurface.cs'),(Join-Path $root 'tests\MiniIconsUiTests.cs')
+    $miniUi+=(Join-Path $root 'src\Modules\TaskMenu\Topology.cs'),(Join-Path $root 'src\Modules\TaskMenu\DockPresentation.cs'),(Join-Path $root 'src\Modules\TaskMenu\DockStacking.cs'),(Join-Path $root 'src\Modules\ThemedSurface.cs'),(Join-Path $root 'tests\MiniIconsUiTests.cs')
     Compile 'MiniIcons.Ui.Tests.exe' $miniUi @('/target:exe','/define:MINI_ICONS_UI_FIXTURE','/main:ReFix.Tests.MiniIconsUiTests',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')))
     $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.cs'|ForEach-Object FullName)
     Compile 'ReFix.Tests.exe' @($hub+$tests+$engine+(Join-Path $root 'src\Bootstrap\BundleAudit.cs')+(Join-Path $root 'src\Bootstrap\InstallFileTransaction.cs')) @('/target:exe','/main:ReFix.Tests.Runner',('/reference:'+(Join-Path $out 'ReFix.Shared.dll')),$menuResource,$miniResource)

@@ -47,6 +47,10 @@ namespace ReFix.Hub
             var mini=Section(content,"mini-icons","Поведение Мини значков",false);
             Add(mini,"Скрывать мини-меню",p=>p.AutoHideMiniIcons,(p,v)=>p.AutoHideMiniIcons=v);
             Add(mini,"Автозапуск Мини значки",p=>p.StartMiniIconsWithHub,(p,v)=>p.StartMiniIconsWithHub=v);
+            Label(mini,"Расположение поверх окон");
+            Choice(mini,"Поверх всех окон (стандарт)","mini-layer",p=>p.MiniIconsLayer==TaskMenuLayer.AboveAll,p=>p.MiniIconsLayer=TaskMenuLayer.AboveAll);
+            Choice(mini,"Частично","mini-layer",p=>p.MiniIconsLayer==TaskMenuLayer.ExceptFullscreen,p=>p.MiniIconsLayer=TaskMenuLayer.ExceptFullscreen);
+            Choice(mini,"Ниже всех окон","mini-layer",p=>p.MiniIconsLayer==TaskMenuLayer.BelowWindows,p=>p.MiniIconsLayer=TaskMenuLayer.BelowWindows);
             var miniSettings=Ui.Button("Открыть настройки",delegate{},false);miniSettings.Margin=new Thickness(0,14,0,0);miniSettings.IsEnabled=openMiniSettings!=null;mini.Children.Add(miniSettings);miniSettings.Click+=async delegate{miniSettings.IsEnabled=false;try{if(openMiniSettings!=null)await openMiniSettings();}catch(Exception ex){notice.Text="Не удалось открыть настройки: "+ex.Message;}finally{miniSettings.IsEnabled=openMiniSettings!=null;}};
             themes.Changed+=Changed;controls.Changed+=Changed;Activated+=delegate{Refresh();};
             Closed+=delegate{closed=true;themes.Changed-=Changed;controls.Changed-=Changed;};
