@@ -53,6 +53,7 @@ namespace ReFix.Shared
                 string directory=MiniTrayFiles.TrayDirectory(this.root);watcher=new FileSystemWatcher(directory,"host.json");watcher.NotifyFilter=NotifyFilters.FileName|NotifyFilters.LastWrite|NotifyFilters.Size;
                 watcher.Changed+=OnHostFile;watcher.Created+=OnHostFile;watcher.Deleted+=OnHostFile;watcher.Renamed+=OnHostFile;watcher.Error+=OnWatcherError;watcher.EnableRaisingEvents=true;
                 menu=tray.ContextMenuStrip;ownMenu=menu==null;if(ownMenu){menu=new ContextMenuStrip();tray.ContextMenuStrip=menu;}
+                menu.ShowImageMargin=false; menu.ShowCheckMargin=false;
                 transferItem=new ToolStripMenuItem("Перенести в мини-меню");transferItem.Click+=OnTransfer;menu.Items.Add(transferItem);menu.Opening+=OnMenuOpening;tray.MouseDown+=OnTrayMouseDown;
                 if(theme!=null)theme.Changed+=OnTheme;UpdateIcon();RefreshHost();
             }catch {Dispose();throw;}

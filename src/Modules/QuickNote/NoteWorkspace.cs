@@ -48,7 +48,8 @@ namespace ReFix.QuickNote
             {
                 var button = args.OriginalSource as Button;
                 if (button == null || button.Name != "NewTabButton") return;
-                var menu = new ContextMenu { PlacementTarget=button, Resources=Resources };
+                var menu = ThemeMenu.Create(Resources);
+                menu.PlacementTarget=button;
                 foreach (bool markdown in new[] { false,true })
                 {
                     var item = new MenuItem { Header=markdown ? "Новая заметка MD" : "Новая заметка" };
@@ -119,7 +120,7 @@ namespace ReFix.QuickNote
         {
             var header = new TextBlock { Text = note.Name, MaxWidth = 170, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6,3,6,3) };
             var item = new TabItem { Header = header, Tag = note };
-            var menu = new ContextMenu { Resources = Resources };
+            var menu = ThemeMenu.Create(Resources);
             menu.Opened += delegate
             {
                 menu.Items.Clear();

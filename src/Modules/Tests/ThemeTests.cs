@@ -32,7 +32,7 @@ internal static class ModuleThemeTests
             Require(!window.RefreshRunning && !window.HasAudio,"Hidden theme update must not start audio or refresh timer");
             Require(rows.Children.Count==1 && Object.ReferenceEquals(rows.Children[0],sentinel),"Theme update must preserve rows");
             Require(sentinel.Value==37 && changes==0,"Theme update must not reset slider values");
-            Require(Object.ReferenceEquals(menu.Resources,window.Resources),"Popup menus must use live shared resources");
+            Require(menu.Resources.MergedDictionaries.Contains(window.Resources),"Popup menus must use live shared resources");
             Require(((System.Windows.Media.SolidColorBrush)menu.FindResource("Hub.Accent")).Color.ToString()=="#FFABCDEF","Open menu resources must receive updated theme");
             string listener=(string)typeof(QuietMixer.Program).GetField("ListenerName",BindingFlags.Static|BindingFlags.NonPublic).GetValue(null);
             Require(listener==ModuleRuntime.PipeName("quiet-mixer")+".Listener","Mixer listener must share current-user/data-root runtime identity");
@@ -113,6 +113,13 @@ internal static class ModuleThemeTests
                     workspace.ApplyTheme(new ThemeProfile{Mode="Custom",Background="#202020"});
                     Require(Object.Equals(workspace.Resources["Note.ToggleGlyph"],System.Windows.Media.Brushes.White),"Dark editor uses a white toggle glyph");
                     workspace.ApplyTheme(second);
+                    var context=ThemeMenu.Create(workspace.Resources);
+                    context.Items.Add(new MenuItem { Header = "Новая заметка" });
+                    context.PlacementTarget=workspace;
+                    context.IsOpen=true;
+                    context.ApplyTemplate();
+                    Require(System.Windows.Media.VisualTreeHelper.GetChild(context,0) is Border && ((Border)System.Windows.Media.VisualTreeHelper.GetChild(context,0)).BorderThickness==new Thickness(0),"Context menu must have no system side gutter or border");
+                    context.IsOpen=false;
                     var editor=Editor(noteEditor);
                     workspace.UpdateLayout();
                     var layer=(RoundedHighlights)((Grid)editor.Parent).Children[1];
@@ -212,7 +219,7 @@ internal static class ModuleThemeTests
             controls.Assign("quick-note.save","F21");controls.Assign("quiet-mixer.hide","F22");controls.Assign("quick-note.hide","F22");
             using(var source=new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("Isolated local controls"){Width=0,Height=0})) {
                 var key=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.F21){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent};note.RaiseEvent(key);
-                var saved=new FlowDocument();library.LoadBody(record,saved);Require(key.Handled&&new TextRange(saved.ContentStart,saved.ContentEnd).Text.Contains("Preserve unsaved note"),"Rebound save must execute on the existing note window");
+                var saved=new FlowDocument();library.LoadBody(record,saved);Require(key.Handled&&new TextRange(saved.ContentStart,saved.ContentEnd).Text.Contains("Preserve unsaved note"),"Rebound save must execute on the existing note window; handled="+key.Handled+", modifiers="+System.Windows.Input.Keyboard.Modifiers+", binding="+controls.Current.Get("quick-note.save"));
                 key=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.Escape){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent};mixer.RaiseEvent(key);Require(!key.Handled,"Old Escape binding must stop executing immediately");
                 key=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.F22){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent};mixer.RaiseEvent(key);Require(key.Handled,"Rebound hide must execute on existing mixer");
             }

@@ -206,7 +206,8 @@ namespace ReFix.QuickNote
         void Palette(Button button, DependencyProperty property)
         {
             var range = new TextRange(editor.Selection.Start, editor.Selection.End);
-            var menu = new ContextMenu { PlacementTarget = button, Resources = Window.GetWindow(this).Resources };
+            var menu = ThemeMenu.Create(Window.GetWindow(this).Resources);
+            menu.PlacementTarget = button;
             menu.Items.Add(new MenuItem { Header = "Стандартные цвета", IsEnabled = false });
             AddSwatches(menu, new[] { "#000000", "#FFFFFF", "#808080", "#C00000", "#FF0000", "#FFC000", "#FFFF00", "#92D050", "#00B050", "#00B0F0", "#0070C0", "#002060", "#7030A0", "#FF66AA" }, color => ApplyColor(range, property, color));
             if (library.Index.Colors.Count > 0)

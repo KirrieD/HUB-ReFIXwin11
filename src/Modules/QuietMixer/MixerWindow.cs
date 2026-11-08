@@ -195,7 +195,7 @@ namespace QuietMixer
         }
         private ContextMenu BuildMenu()
         {
-            ContextMenu c=new ContextMenu { Resources=Resources };
+            ContextMenu c=ThemeMenu.Create(Resources);
             c.SetResourceReference(Control.BackgroundProperty,"Hub.Surface"); c.SetResourceReference(Control.ForegroundProperty,"Hub.Foreground");
             MenuItem settings=new MenuItem { Header="Параметры звука Windows" };
             settings.Click+=delegate { System.Diagnostics.Process.Start("ms-settings:sound"); Hide(); }; c.Items.Add(settings);

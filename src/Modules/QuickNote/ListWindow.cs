@@ -72,7 +72,7 @@ namespace ReFix.QuickNote
             };
             header.Children.Add(title);
             root.Children.Add(header);
-            var menu = new ContextMenu { Resources = Resources };
+            var menu = ThemeMenu.Create(Resources);
             var rename = new MenuItem { Header = "Переименовать список…" };
             rename.Click += delegate { controller.RenameList(this, list); };
             menu.Items.Add(rename);

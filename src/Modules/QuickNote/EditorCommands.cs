@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using ReFix.Shared;
 
 namespace ReFix.QuickNote
 {
@@ -30,7 +31,7 @@ namespace ReFix.QuickNote
         void ConfigureWorkspace()
         {
             var menu = new Menu();
-            NoteMenuStyle.Apply(menu);
+            ThemeMenu.Apply(menu);
             menu.SetResourceReference(Control.BackgroundProperty, "Hub.Surface");
             menu.SetResourceReference(Control.ForegroundProperty, "Hub.Foreground");
             var file = Section(menu, "Файл");
@@ -69,6 +70,18 @@ namespace ReFix.QuickNote
             DockPanel.SetDock(menu, Dock.Top);
             root.Children.Insert(0, menu);
 
+            editor.Loaded += delegate
+            {
+                var host = Window.GetWindow(editor);
+                if (host == null) return;
+                var context = ThemeMenu.Create(host.Resources);
+                Command(context, "Вырезать", () => ExecuteSafely(() => CopySelection(true)), "Ctrl+X");
+                Command(context, "Копировать", () => ExecuteSafely(() => CopySelection(false)), "Ctrl+C");
+                Command(context, "Вставить", () => ExecuteSafely(editor.Paste), "Ctrl+V");
+                context.Items.Add(new Separator());
+                Command(context, "Выбрать всё", editor.SelectAll, "Ctrl+A");
+                editor.ContextMenu = context;
+            };
             AddFindPane();
             if (note.Markdown)
             {
@@ -114,7 +127,8 @@ namespace ReFix.QuickNote
             Button levels = null;
             levels = Button("Списки ▾", delegate
             {
-                var menu = new ContextMenu { PlacementTarget = levels };
+                var menu = ThemeMenu.Create(Window.GetWindow(this).Resources);
+                menu.PlacementTarget = levels;
                 foreach (var marker in new[] { TextMarkerStyle.Disc, TextMarkerStyle.Circle, TextMarkerStyle.Square, TextMarkerStyle.Decimal, TextMarkerStyle.LowerLatin, TextMarkerStyle.UpperRoman })
                 {
                     string label = new Dictionary<TextMarkerStyle,string>{{TextMarkerStyle.Disc,"● Маркер"},{TextMarkerStyle.Circle,"○ Круг"},{TextMarkerStyle.Square,"■ Квадрат"},{TextMarkerStyle.Decimal,"1. 2. 3."},{TextMarkerStyle.LowerLatin,"a. b. c."},{TextMarkerStyle.UpperRoman,"I. II. III."}}[marker];
