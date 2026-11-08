@@ -27,7 +27,8 @@ namespace ReFix.QuickNote
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             WindowStyle = WindowStyle.None; AllowsTransparency = true;
             Background = Brushes.Transparent; ResizeMode = ResizeMode.CanResizeWithGrip;
-            ThemeControls.Install(this);
+            ThemeControls.Install(this, true);
+            NoteDisclosureStyle.Install(this);
             var root = new DockPanel { Margin = new Thickness(8) };
             var top = new DockPanel { Background = Brushes.Transparent };
             var commands = new StackPanel { Orientation = Orientation.Horizontal };
@@ -41,7 +42,7 @@ namespace ReFix.QuickNote
             top.Children.Add(heading);
             DockPanel.SetDock(top, Dock.Top);
             root.Children.Add(top);
-            tabs.Resources.Add(typeof(TabItem), System.Windows.Markup.XamlReader.Parse(@"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='TabItem'><Setter Property='Foreground' Value='{DynamicResource Hub.Foreground}'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='TabItem'><Border x:Name='tab' CornerRadius='7,7,0,0' Background='Transparent' Padding='5,4' Margin='1,0'><ContentPresenter ContentSource='Header'/></Border><ControlTemplate.Triggers><Trigger Property='IsSelected' Value='True'><Setter TargetName='tab' Property='Background' Value='{DynamicResource Hub.Surface}'/></Trigger><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='tab' Property='BorderBrush' Value='{DynamicResource Hub.Border}'/><Setter TargetName='tab' Property='BorderThickness' Value='1'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>"));
+            tabs.Resources.Add(typeof(TabItem), System.Windows.Markup.XamlReader.Parse(@"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='TabItem'><Setter Property='Foreground' Value='{DynamicResource Hub.Foreground}'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='TabItem'><Border x:Name='tab' CornerRadius='7,7,0,0' Background='Transparent' Padding='5,4' Margin='1,0'><ContentPresenter ContentSource='Header'/></Border><ControlTemplate.Triggers><Trigger Property='IsSelected' Value='True'><Setter TargetName='tab' Property='Background' Value='{DynamicResource Hub.Surface}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>"));
             tabs.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(@"<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='TabControl'><DockPanel><DockPanel DockPanel.Dock='Top' Background='{DynamicResource Hub.Background}'><ScrollViewer HorizontalScrollBarVisibility='Auto' VerticalScrollBarVisibility='Disabled' CanContentScroll='False'><StackPanel Orientation='Horizontal'><TabPanel IsItemsHost='True'/><Button x:Name='NewTabButton' Content='+' ToolTip='Добавить заметку' MinWidth='27' Margin='3'/></StackPanel></ScrollViewer></DockPanel><ContentPresenter x:Name='PART_SelectedContentHost' ContentSource='SelectedContent'/></DockPanel></ControlTemplate>");
             tabs.AddHandler(Button.ClickEvent,new RoutedEventHandler(delegate(object sender,RoutedEventArgs args)
             {
@@ -73,7 +74,7 @@ namespace ReFix.QuickNote
             StateChanged += delegate { if (WindowState == WindowState.Minimized) { WindowState = WindowState.Normal; Minimize(); } };
         }
 
-        internal void ApplyTheme(ThemeProfile theme) { surface.Apply(this, theme); }
+        internal void ApplyTheme(ThemeProfile theme) { surface.Apply(this, theme); NoteDisclosureStyle.Apply(this, theme); }
         internal void Open(NoteRecord note) { Refresh(note); Show(); Activate(); }
         internal void Minimize() { if (controller.SaveList(list.Id)) Hide(); }
 
@@ -104,7 +105,6 @@ namespace ReFix.QuickNote
                 {
                     var note = (NoteRecord)item.Tag;
                     ((TextBlock)item.Header).Text = note.Name;
-                    item.ToolTip = note.Name;
                 }
                 var target = tabs.Items.OfType<TabItem>().FirstOrDefault(i => i.Tag == wanted) ?? tabs.Items.OfType<TabItem>().FirstOrDefault();
                 if (target == null) return;
@@ -118,7 +118,7 @@ namespace ReFix.QuickNote
         TabItem Tab(NoteRecord note)
         {
             var header = new TextBlock { Text = note.Name, MaxWidth = 170, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6,3,6,3) };
-            var item = new TabItem { Header = header, Tag = note, ToolTip = note.Name };
+            var item = new TabItem { Header = header, Tag = note };
             var menu = new ContextMenu { Resources = Resources };
             menu.Opened += delegate
             {

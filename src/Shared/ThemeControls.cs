@@ -4,7 +4,9 @@ namespace ReFix.Shared
 {
     public static class ThemeControls
     {
-        public static void Install(Window window)
+        public static void Install(Window window) { Install(window, false); }
+
+        public static void Install(Window window, bool contrastingComboGlyph)
         {
             ResourceDictionary dictionary=(ResourceDictionary)XamlReader.Parse(@"
 <ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
@@ -48,7 +50,7 @@ namespace ReFix.Shared
     <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ComboBox'><Grid>
       <ToggleButton Focusable='False' Foreground='{DynamicResource Hub.Foreground}' IsChecked='{Binding IsDropDownOpen,Mode=TwoWay,RelativeSource={RelativeSource TemplatedParent}}'>
         <ToggleButton.Template><ControlTemplate TargetType='ToggleButton'><Border Background='{DynamicResource Hub.Surface}' BorderBrush='{DynamicResource Hub.Border}' BorderThickness='1' CornerRadius='5' Padding='10,7'><ContentPresenter/></Border></ControlTemplate></ToggleButton.Template>
-        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width='22'/></Grid.ColumnDefinitions><ContentPresenter Content='{TemplateBinding SelectionBoxItem}' VerticalAlignment='Center'/><TextBlock Grid.Column='1' Text='⌄' Foreground='{DynamicResource Hub.Foreground}' HorizontalAlignment='Right'/></Grid>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width='22'/></Grid.ColumnDefinitions><ContentPresenter Content='{TemplateBinding SelectionBoxItem}' VerticalAlignment='Center'/><TextBlock Grid.Column='1' Text='⌄' Foreground='{DynamicResource ComboGlyphResource}' HorizontalAlignment='Right'/></Grid>
       </ToggleButton>
       <Popup x:Name='PART_Popup' IsOpen='{TemplateBinding IsDropDownOpen}' Placement='Bottom' AllowsTransparency='True' Focusable='False'>
         <Border MinWidth='{Binding ActualWidth,RelativeSource={RelativeSource TemplatedParent}}' Background='{DynamicResource Hub.Surface}' BorderBrush='{DynamicResource Hub.Border}' BorderThickness='1' CornerRadius='5' Padding='4'><ScrollViewer CanContentScroll='True'><ItemsPresenter KeyboardNavigation.DirectionalNavigation='Contained'/></ScrollViewer></Border>
@@ -68,7 +70,7 @@ namespace ReFix.Shared
       </Track></Grid>
     </ControlTemplate></Setter.Value></Setter>
   </Style>
-</ResourceDictionary>");
+</ResourceDictionary>".Replace("ComboGlyphResource", contrastingComboGlyph ? "Note.ComboGlyph" : "Hub.Foreground"));
             foreach(var type in new[]{typeof(System.Windows.Controls.ListBox),typeof(System.Windows.Controls.ListBoxItem),typeof(System.Windows.Controls.ContextMenu),typeof(System.Windows.Controls.MenuItem)})
             {
                 var style=new Style(type);

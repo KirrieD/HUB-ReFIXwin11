@@ -30,6 +30,7 @@ namespace ReFix.QuickNote
         void ConfigureWorkspace()
         {
             var menu = new Menu();
+            NoteMenuStyle.Apply(menu);
             menu.SetResourceReference(Control.BackgroundProperty, "Hub.Surface");
             menu.SetResourceReference(Control.ForegroundProperty, "Hub.Foreground");
             var file = Section(menu, "Файл");
