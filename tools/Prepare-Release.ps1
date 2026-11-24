@@ -8,8 +8,8 @@ if ($Tag -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' -or $
 $Artifacts = [IO.Path]::GetFullPath($Artifacts)
 $catalogPath = Join-Path $Artifacts 'catalog.json'
 $catalog = Get-Content -LiteralPath $catalogPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$expected = @('quiet-mixer','quick-note','task-menu','mini-icons')
-if ($catalog.SchemaVersion -ne 1 -or @($catalog.Modules).Count -ne 4) { throw 'Unexpected catalogue schema or module count' }
+$expected = @('quiet-mixer','quick-note','task-menu','mini-icons','system-monitor')
+if ($catalog.SchemaVersion -ne 1 -or @($catalog.Modules).Count -ne 5) { throw 'Unexpected catalogue schema or module count' }
 foreach ($module in $catalog.Modules) {
     if ($module.Id -cnotin $expected -or $module.Version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$' -or [version]$module.MinHubVersion -gt [version]$version) { throw 'Unexpected module/version' }
     $expected = @($expected | Where-Object { $_ -cne $module.Id })

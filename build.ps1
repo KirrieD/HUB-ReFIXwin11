@@ -1,4 +1,4 @@
-﻿param([switch]$Test,[switch]$BuildTests,[switch]$Package,[switch]$PublishedPackages,[ValidateSet("quick-note","quiet-mixer","task-menu","mini-icons")][string]$OnlyModule)
+﻿param([switch]$Test,[switch]$BuildTests,[switch]$Package,[switch]$PublishedPackages,[ValidateSet("quick-note","quiet-mixer","task-menu","mini-icons","system-monitor")][string]$OnlyModule)
 $ErrorActionPreference='Stop'
 $root=$PSScriptRoot
 if($Test){& (Join-Path $root 'tools\Verify-PowerShell.ps1') -Root $root}

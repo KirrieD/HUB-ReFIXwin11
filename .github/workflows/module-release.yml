@@ -6,6 +6,7 @@ on:
       - 'quiet-mixer-v*'
       - 'task-menu-v*'
       - 'mini-icons-v*'
+      - 'system-monitor-v*'
 concurrency:
   group: refix-publication
   cancel-in-progress: false
@@ -23,9 +24,10 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:RELEASE_TAG -cnotmatch '^(quick-note|quiet-mixer|task-menu|mini-icons)-v([0-9]+\.[0-9]+\.[0-9]+)$') { throw 'Invalid tag' }
+          if ($env:RELEASE_TAG -cnotmatch '^(quick-note|quiet-mixer|task-menu|mini-icons|system-monitor)-v([0-9]+\.[0-9]+\.[0-9]+)$') { throw 'Invalid tag' }
           $id = $Matches[1]
           ./build.ps1 -OnlyModule $id
+          if ($id -ceq 'system-monitor') { ./tools/Test-SystemMonitor.ps1 -Artifacts artifacts }
           if ($id -ceq 'quick-note') { ./tools/Build-Modules.ps1 -Artifacts artifacts -Only $id -Test }
           ./tools/Merge-ModuleRelease.ps1 -Tag $env:RELEASE_TAG -Candidate artifacts/module-catalog.json -Catalog catalog/catalog.json -Output artifacts/catalog-release.json
       - name: Publish only the changed module and update its catalogue entry

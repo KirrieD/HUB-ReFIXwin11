@@ -1,4 +1,4 @@
-﻿param([string]$Artifacts = (Join-Path $PSScriptRoot '..\artifacts'), [switch]$Test, [ValidateSet("quick-note","quiet-mixer","task-menu","mini-icons")][string]$Only, [switch]$PublishedPackages)
+﻿param([string]$Artifacts = (Join-Path $PSScriptRoot '..\artifacts'), [switch]$Test, [ValidateSet("quick-note","quiet-mixer","task-menu","mini-icons","system-monitor")][string]$Only, [switch]$PublishedPackages)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $Artifacts = [IO.Path]::GetFullPath($Artifacts)
@@ -9,10 +9,11 @@ $wpf = Join-Path $framework 'WPF'
 $shared = Join-Path $Artifacts 'ReFix.Shared.dll'
 if (!(Test-Path -LiteralPath $shared)) { throw "Build shared SDK first: $shared" }
 $refs = @('WindowsBase','PresentationCore','PresentationFramework','ReachFramework','System.Printing','UIAutomationClient','UIAutomationTypes') | ForEach-Object { '/reference:' + (Join-Path $wpf ($_ + '.dll')) }
-$refs += '/reference:System.dll','/reference:System.Core.dll','/reference:System.Xaml.dll','/reference:System.Web.Extensions.dll','/reference:System.Xml.dll','/reference:System.Xml.Linq.dll','/reference:System.IO.Compression.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll',"/reference:$shared"
+$refs += '/reference:System.Management.dll','/reference:System.dll','/reference:System.Core.dll','/reference:System.Xaml.dll','/reference:System.Web.Extensions.dll','/reference:System.Xml.dll','/reference:System.Xml.Linq.dll','/reference:System.IO.Compression.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll',"/reference:$shared"
 $packages = Join-Path $Artifacts 'packages'
 New-Item -ItemType Directory -Path $packages -Force | Out-Null
 $modules = @(
+    @{ Id='system-monitor'; Name='Системный мониторинг'; Description='Графики производительности, виджет рабочего стола, процессы и потребители ресурсов.'; Source='SystemMonitor'; Exe='SystemMonitor.exe'; Preview='notes' },
     @{ Id='quiet-mixer'; Name='Микшер громкости'; Description='Громкость устройства и приложений, настраиваемая горячая клавиша.'; Source='QuietMixer'; Exe='QuietMixer.exe'; Preview='mixer' },
     @{ Id='quick-note'; Name='Быстрая заметка'; Description='Заметки с форматированием, изображениями и плавающими списками.'; Source='QuickNote'; Exe='QuickNote.exe'; Preview='notes' },
     @{ Id='task-menu'; Name='Меню задач'; Description='Независимые панели файлов и папок по краям каждого экрана. Плавное раскрытие при наведении.'; Source='TaskMenu'; Exe='TaskMenu.exe'; Preview='menu' },

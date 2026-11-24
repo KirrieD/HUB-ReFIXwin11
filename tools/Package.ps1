@@ -10,14 +10,14 @@ $files = @('HUB-ReFIX.exe','HUB-ReFIX.exe.config','HUB-ReFIX.Core.exe','HUB-ReFI
 $packages = @()
 $ids = @()
 foreach ($module in $catalog.Modules) {
-    if ($module.Id -cnotin @('quiet-mixer','quick-note','task-menu','mini-icons') -or $module.Id -cin $ids -or $module.Version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$' -or [version]$module.MinHubVersion -gt [version]$version) { throw 'Unexpected module/version in catalogue' }
+    if ($module.Id -cnotin @('quiet-mixer','quick-note','task-menu','mini-icons','system-monitor') -or $module.Id -cin $ids -or $module.Version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$' -or [version]$module.MinHubVersion -gt [version]$version) { throw 'Unexpected module/version in catalogue' }
     $ids += $module.Id
     $name = $module.Id + '-' + $module.Version + '.zip'
     $path = Join-Path $Artifacts "packages\$name"
     if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $module.Sha256) { throw "Catalogue hash mismatch: $name" }
     if ($module.Id -cin @('quiet-mixer','quick-note')) { $packages += $module.Id + '-' + $version + '.zip' }
 }
-if ($catalog.SchemaVersion -ne 1 -or $ids.Count -ne 4) { throw 'Unexpected catalogue schema/module count' }
+if ($catalog.SchemaVersion -ne 1 -or $ids.Count -ne 5) { throw 'Unexpected catalogue schema/module count' }
 foreach ($file in $files) { if (!(Test-Path -LiteralPath (Join-Path $Artifacts $file) -PathType Leaf)) { throw "Build first: missing $file" } }
 $destination = Join-Path $Artifacts 'HUB-ReFIXwin11'
 if ([IO.Path]::GetFullPath($destination) -ne [IO.Path]::Combine($Artifacts,'HUB-ReFIXwin11')) { throw 'Invalid package destination' }

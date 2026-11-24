@@ -52,7 +52,7 @@ namespace ReFix.Shared
         }
         static Color Parse(string hex){return Color.FromArgb(Convert.ToInt32(hex.Substring(1,2),16),Convert.ToInt32(hex.Substring(3,2),16),Convert.ToInt32(hex.Substring(5,2),16));}
         static Color Stock(string id) {
-            switch(id){case "quiet-mixer":return Color.FromArgb(114,200,255);case "task-menu":return Color.FromArgb(174,154,255);case "quick-note":return Color.FromArgb(244,203,114);case "mini-icons":return Color.FromArgb(116,221,197);default:return Color.FromArgb(242,82,96);}
+            switch(id){case "system-monitor":return Color.FromArgb(86,200,170);case "quiet-mixer":return Color.FromArgb(114,200,255);case "task-menu":return Color.FromArgb(174,154,255);case "quick-note":return Color.FromArgb(244,203,114);case "mini-icons":return Color.FromArgb(116,221,197);default:return Color.FromArgb(242,82,96);}
         }
         static void Line(Graphics g,Pen p,float x1,float y1,float x2,float y2){g.DrawLine(p,x1,y1,x2,y2);}
         static void DrawGlyph(Graphics g,Pen p,string id,bool framed) {
@@ -60,6 +60,9 @@ namespace ReFix.Shared
                 case "hub":
                     if(!framed)g.DrawPolygon(p,new PointF[]{new PointF(12,2),new PointF(22,12),new PointF(12,22),new PointF(2,12)});
                     Line(g,p,8,7,8,17);Line(g,p,16,7,16,17);Line(g,p,8,12,16,12);break;
+                case "system-monitor":
+                    g.DrawRectangle(p,3,4,18,13);Line(g,p,8,21,16,21);Line(g,p,12,17,12,21);
+                    g.DrawLines(p,new[]{new PointF(5,12),new PointF(8,12),new PointF(10,7),new PointF(13,14),new PointF(16,10),new PointF(19,10)});break;
                 case "quiet-mixer":
                     Line(g,p,6,4,6,20);Line(g,p,12,4,12,20);Line(g,p,18,4,18,20);
                     Line(g,p,3,8,9,8);Line(g,p,9,15,15,15);Line(g,p,15,10,21,10);break;
