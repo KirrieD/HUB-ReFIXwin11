@@ -60,6 +60,21 @@
                         "EnableArgument":  "",
                         "DisableArgument":  "",
                         "StatusArgument":  ""
+                    },
+                    {
+                        "Id":  "system-monitor",
+                        "Name":  "Системный мониторинг",
+                        "Description":  "Графики производительности, виджет рабочего стола, процессы и потребители ресурсов.",
+                        "Version":  "1.0.0",
+                        "Kind":  "process",
+                        "EntryPoint":  "SystemMonitor.exe",
+                        "PackageUrl":  "https://github.com/KirrieD/HUB-ReFIXwin11/releases/download/system-monitor-v1.0.0/system-monitor-1.0.0.zip",
+                        "Sha256":  "2b6d2e7e497009d4849efc98ac741fc8450ecf948c4d92bcf6b14796d75e70d4",
+                        "Preview":  "notes",
+                        "MinHubVersion":  "1.5.1",
+                        "EnableArgument":  "",
+                        "DisableArgument":  "",
+                        "StatusArgument":  ""
                     }
                 ]
 }
