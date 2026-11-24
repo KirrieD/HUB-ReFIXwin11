@@ -47,25 +47,90 @@ namespace ReFix.SystemMonitor
     }
     internal sealed class CompactWindow : MonitorWindow
     {
-        sealed class Row {internal Grid Panel;internal TextBlock Value,Detail;internal Sparkline Chart;}
-        readonly Dictionary<string,Row> rows=new Dictionary<string,Row>();
-        public CompactWindow(ThemeProfile theme,Action open,Action settings,Action moved):base(theme,338,208) {
-            Title="Мониторинг";ShowInTaskbar=false;Header("Мониторинг",settings,moved,false,open);
-            var stack=new StackPanel();Body.Children.Add(stack);
-            string[] kinds={"cpu","gpu","memory","disk"}, labels={"ЦП","GPU","ОЗУ","Диск"};
-            for(int i=0;i<kinds.Length;i++){
-                var panel=new Grid {Height=31,Background=Brushes.Transparent,Cursor=Cursors.Hand};panel.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(42)});panel.ColumnDefinitions.Add(new ColumnDefinition());panel.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(78)});
-                panel.Children.Add(MonitorView.Text(labels[i],12));var texts=new StackPanel();var val=MonitorView.Text("—",12);var detail=MonitorView.Text("Нет данных",9,"Hub.Muted");texts.Children.Add(val);texts.Children.Add(detail);Grid.SetColumn(texts,1);panel.Children.Add(texts);
-                var chart=new Sparkline {Margin=new Thickness(5,7,0,7)};Grid.SetColumn(chart,2);panel.Children.Add(chart);panel.MouseLeftButtonUp+=delegate {open();};stack.Children.Add(panel);rows[kinds[i]]=new Row {Panel=panel,Value=val,Detail=detail,Chart=chart};
+        sealed class Row { internal Grid Panel; internal TextBlock Value, Detail; internal Sparkline Chart; }
+        readonly Dictionary<string, Row> rows = new Dictionary<string, Row>();
+
+        public CompactWindow(ThemeProfile theme, Action open, Action settings, Action moved) : base(theme, 346, 226)
+        {
+            Title = "Мониторинг";
+            ShowInTaskbar = false;
+            Header("Мониторинг", settings, moved, false, open);
+            var stack = new StackPanel();
+            Body.Children.Add(stack);
+            string[] kinds = { "cpu", "gpu", "memory", "disk" };
+            string[] labels = { "ЦП", "GPU", "ОЗУ", "Диск" };
+            for (int i = 0; i < kinds.Length; i++)
+            {
+                var panel = new Grid { Height = 36, Background = Brushes.Transparent, Cursor = Cursors.Hand };
+                panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(37) });
+                panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(55) });
+                panel.ColumnDefinitions.Add(new ColumnDefinition());
+                panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(77) });
+                var label = MonitorView.Text(labels[i], 12);
+                panel.Children.Add(label);
+                var value = MonitorView.Text("—", 13);
+                value.FontWeight = FontWeights.SemiBold;
+                Grid.SetColumn(value, 1);
+                panel.Children.Add(value);
+                var chart = new Sparkline { Margin = new Thickness(3, 6, 10, 6), TrimLeadingMissing = true, FillArea = true, FitRange = true };
+                Grid.SetColumn(chart, 2);
+                panel.Children.Add(chart);
+                var detail = MonitorView.Text("—", 11, "Hub.Muted");
+                detail.HorizontalAlignment = HorizontalAlignment.Right;
+                Grid.SetColumn(detail, 3);
+                panel.Children.Add(detail);
+                panel.MouseLeftButtonUp += delegate { open(); };
+                stack.Children.Add(panel);
+                rows[kinds[i]] = new Row { Panel = panel, Value = value, Detail = detail, Chart = chart };
             }
         }
-        public override void ApplyConfig(MonitorConfig value){base.ApplyConfig(value);Body.LayoutTransform=new ScaleTransform(value.Scale,value.Scale);int count=0;foreach(var pair in rows){bool show=value.VisibleKinds==null||value.VisibleKinds.Contains(pair.Key);pair.Value.Panel.Visibility=show?Visibility.Visible:Visibility.Collapsed;if(show)count++;pair.Value.Chart.LineBrush=MonitorView.Color(this,value,pair.Key);}Width=28+310*value.Scale;Height=28+(68+31*count)*value.Scale;}
-        public void Update(Snapshot snapshot,Dictionary<string,List<double?>> history){foreach(var pair in rows){Metric m=snapshot.Metrics.Where(x=>MonitorView.Kind(x)==pair.Key).OrderByDescending(x=>x.Percent??-1).FirstOrDefault();pair.Value.Value.Text=MonitorView.Value(m);pair.Value.Detail.Text=MonitorView.Detail(m);pair.Value.Panel.ToolTip=m==null?"Нет данных":m.Name+"\n"+MonitorView.Detail(m);pair.Value.Chart.LineBrush=MonitorView.Color(this,config,pair.Key);pair.Value.Chart.Update(m==null?null:MonitorView.History(history,m.Id));}}
+
+        public override void ApplyConfig(MonitorConfig value)
+        {
+            base.ApplyConfig(value);
+            Body.LayoutTransform = new ScaleTransform(value.Scale, value.Scale);
+            int count = 0;
+            foreach (var pair in rows)
+            {
+                bool show = value.VisibleKinds == null || value.VisibleKinds.Contains(pair.Key);
+                pair.Value.Panel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                if (show) count++;
+                pair.Value.Chart.LineBrush = MonitorView.Color(this, value, pair.Key);
+            }
+            Width = 28 + 318 * value.Scale;
+            Height = 28 + (62 + 36 * count) * value.Scale;
+        }
+
+        public void Update(Snapshot snapshot, Dictionary<string, List<double?>> history)
+        {
+            foreach (var pair in rows)
+            {
+                Metric metric = snapshot.Metrics.Where(x => MonitorView.Kind(x) == pair.Key).OrderByDescending(x => x.Percent ?? -1).FirstOrDefault();
+                pair.Value.Value.Text = MonitorView.Value(metric);
+                pair.Value.Detail.Text = Summary(metric);
+                pair.Value.Panel.ToolTip = metric == null ? "Нет данных" : metric.Name + "\n" + MonitorView.Detail(metric) + "\n" + metric.Detail + "\nМасштаб мини-графика адаптируется к диапазону значений.";
+                pair.Value.Chart.LineBrush = MonitorView.Color(this, config, pair.Key);
+                pair.Value.Chart.Update(metric == null ? null : MonitorView.History(history, metric.Id));
+            }
+        }
+
+        static string Summary(Metric metric)
+        {
+            if (metric == null) return "—";
+            switch (MonitorView.Kind(metric))
+            {
+                case "cpu": return metric.Temperature.HasValue ? MonitorView.Number(metric.Temperature, " °C") : MonitorView.Number(metric.FrequencyGHz, " ГГц");
+                case "gpu": return metric.Temperature.HasValue ? MonitorView.Number(metric.Temperature, " °C") : MonitorView.Bytes(metric.UsedBytes);
+                case "memory": return MonitorView.Bytes(metric.UsedBytes);
+                case "disk": return metric.ReadBytesPerSecond.HasValue || metric.WriteBytesPerSecond.HasValue ? MonitorView.Bytes((metric.ReadBytesPerSecond ?? 0) + (metric.WriteBytesPerSecond ?? 0)) + "/с" : "—";
+                default: return "—";
+            }
+        }
     }
     internal sealed class MetricCard : Border
     {
         readonly TextBlock title=MonitorView.Text("",14),value=MonitorView.Text("—",24),detail=MonitorView.Text("",11,"Hub.Muted");
-        internal readonly Sparkline Chart=new Sparkline {Height=110,ShowGrid=true,Margin=new Thickness(0,10,0,5)};
+        internal readonly Sparkline Chart=new Sparkline {Height=110,ShowGrid=true,FillArea=true,Margin=new Thickness(0,10,0,5)};
         internal MetricCard(string id,Action<string> detach){Margin=new Thickness(0,0,12,12);Padding=new Thickness(12);BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);SetResourceReference(BorderBrushProperty,"Hub.Border");SetResourceReference(BackgroundProperty,"Hub.Surface");var stack=new StackPanel();var head=new DockPanel();if(detach!=null){var button=MonitorView.Button("↗",delegate{detach(id);});button.ToolTip="Отделить график";DockPanel.SetDock(button,Dock.Right);head.Children.Add(button);}head.Children.Add(title);stack.Children.Add(head);stack.Children.Add(value);stack.Children.Add(Chart);detail.TextWrapping=TextWrapping.Wrap;stack.Children.Add(detail);Child=stack;}
         internal void Update(Metric metric,Dictionary<string,List<double?>> history,MonitorConfig cfg){title.Text=metric.Name;value.Text=MonitorView.Value(metric);detail.Text=MonitorView.Detail(metric);ToolTip=metric.Detail;Chart.LineBrush=MonitorView.Color(this,cfg,MonitorView.Kind(metric));Chart.Update(MonitorView.History(history,metric.Id));}
     }

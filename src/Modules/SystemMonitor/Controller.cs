@@ -27,7 +27,7 @@ namespace ReFix.SystemMonitor
         MonitorConfig config;
         Snapshot snapshot;
         Task<Snapshot> pending;
-        bool disposed, stopping;
+        bool disposed;
         DateTime lastSample=DateTime.MinValue;
 
         internal Controller(Application app,ThemeStore themes)
@@ -108,30 +108,45 @@ namespace ReFix.SystemMonitor
         bool Visible{get{return compact.IsVisible||(main!=null&&main.IsVisible)||charts.Values.Any(c=>c.IsVisible);}}
         void UpdateTimer(){if(disposed)return;if(Visible||config.BackgroundHistory)timer.Start();else timer.Stop();}
         void Tick(object sender,EventArgs e){Sample();}
-        async void Sample()
+        void Sample()
         {
             if(disposed||pending!=null)return;
             int interval=Visible?config.IntervalSeconds:config.BackgroundHistory?Math.Max(5,config.IntervalSeconds):0;
             if(interval==0||DateTime.UtcNow-lastSample<TimeSpan.FromSeconds(interval))return;
-            bool processes=(main!=null&&main.IsVisible);
+            bool processes=main!=null&&main.IsVisible;
             lastSample=DateTime.UtcNow;
             pending=Task.Run(()=>collector.Collect(processes));
-            try
+            pending.ContinueWith(completed=>
             {
-                var value=await pending;
-                if(disposed)return;
-                snapshot=value;
-                foreach(var metric in value.Metrics)
+                if(app.Dispatcher.HasShutdownStarted){collector.Dispose();return;}
+                app.Dispatcher.BeginInvoke(new Action(delegate
                 {
-                    List<double?> values;
-                    if(!history.TryGetValue(metric.Id,out values)){values=new List<double?>();history[metric.Id]=values;times[metric.Id]=new List<DateTime>();}
-                    values.Add(metric.Percent);times[metric.Id].Add(DateTime.UtcNow);
-                }
-                foreach(var key in history.Keys.Where(id=>!value.Metrics.Any(m=>m.Id==id)).ToArray()){history.Remove(key);times.Remove(key);}
-                Trim();Render();
-            }
-            catch(Exception ex){if(!disposed)compact.ToolTip="Не удалось получить показатели: "+ex.Message;}
-            finally{pending=null;if(stopping)collector.Dispose();}
+                    pending=null;
+                    if(disposed){collector.Dispose();return;}
+                    if(completed.IsFaulted)
+                    {
+                        compact.ToolTip="Не удалось получить показатели: "+completed.Exception.GetBaseException().Message;
+                        return;
+                    }
+                    if(completed.IsCanceled)return;
+                    snapshot=completed.Result;
+                    foreach(var metric in snapshot.Metrics)
+                    {
+                        List<double?> values;
+                        if(!history.TryGetValue(metric.Id,out values))
+                        {
+                            values=new List<double?>();history[metric.Id]=values;
+                            times[metric.Id]=new List<DateTime>();
+                        }
+                        values.Add(metric.Percent);times[metric.Id].Add(DateTime.UtcNow);
+                    }
+                    foreach(var key in history.Keys.Where(id=>!snapshot.Metrics.Any(m=>m.Id==id)).ToArray())
+                    {
+                        history.Remove(key);times.Remove(key);
+                    }
+                    Trim();Render();
+                }));
+            },TaskScheduler.Default);
         }
         void Trim()
         {
@@ -210,7 +225,7 @@ namespace ReFix.SystemMonitor
         }
         public void Dispose()
         {
-            if(disposed)return;disposed=true;stopping=true;timer.Stop();
+            if(disposed)return;disposed=true;timer.Stop();
             themes.Changed-=ThemeChanged;SystemEvents.DisplaySettingsChanged-=DisplayChanged;
             compact.Close();if(main!=null)main.Close();if(settings!=null)settings.Close();
             foreach(var chart in charts.Values.ToArray())chart.Close();

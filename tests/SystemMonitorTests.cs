@@ -62,9 +62,14 @@ namespace ReFix.Tests
                 var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
                 var theme=new ThemeProfile{Mode="Custom",Background="#202020",Foreground="#FFFFFF"};
                 int opened=0;
-                var histories=sample.Metrics.ToDictionary(m=>m.Id,m=>new List<double?>{null,10,20,null,15,30});
+                var histories=sample.Metrics.ToDictionary(m=>m.Id,m=>Enumerable.Range(0,60).Select(i=>(double?)Math.Max(0,Math.Min(100,(m.Percent??20)+Math.Sin(i*.7)*3+Math.Cos(i*.21)*2))).ToList());
                 var compact=new CompactWindow(theme,()=>opened++,()=>{},()=>{});compact.ApplyConfig(config);compact.Show();compact.Update(sample,histories);Pump();
                 Check("desktop summary is compact",compact.Width<=350&&compact.Height<=280&&!compact.ShowInTaskbar);
+                var spark=Find<Sparkline>(compact,s=>true);
+                Check("summary charts use readable area lines and initial history fills available width",spark!=null&&spark.ActualWidth>=65&&spark.ActualHeight>=20&&spark.FillArea&&spark.TrimLeadingMissing);
+                var texts=Find<StackPanel>(compact,p=>p.Children.OfType<Grid>().Count()==4);
+                Check("summary uses four aligned single-line metric rows",texts!=null&&texts.Children.OfType<Grid>().All(g=>g.ColumnDefinitions.Count==4));
+
                 var row=Find<Grid>(compact,g=>g.Cursor==Cursors.Hand);
                 Check("summary has clickable metric row",row!=null);
                 row.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
