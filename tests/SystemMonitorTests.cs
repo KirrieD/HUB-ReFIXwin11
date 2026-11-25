@@ -93,9 +93,9 @@ namespace ReFix.Tests
                 Find<TabControl>(main,t=>t.Items.Count==3).SelectedIndex=2;Pump();
                 var grid=Find<DataGrid>(main,g=>g.Columns.Count>=6);
                 Check("resource consumers expose measured columns",grid!=null&&grid.Items.Count>0);
-                double nameWidth=grid.Columns[0].ActualWidth;
-                main.Width+=150;main.UpdateLayout();Pump();
-                Check("process name column uses extra space instead of an empty gutter",grid.Columns[0].ActualWidth>nameWidth+100);
+                main.UpdateLayout();
+                double gutter=grid.ActualWidth-grid.Columns.Sum(column=>column.ActualWidth);
+                Check("process columns fill the available width apart from the scrollbar",grid.Columns[0].Width.IsStar&&gutter<40);
                 Find<TabControl>(main,t=>t.Items.Count==3).SelectedIndex=0;Pump();
                 main.ApplyTheme(new ThemeProfile{Mode="Custom",Background="#FFFFFF",Foreground="#111111"});main.Update(sample,histories);Pump();
                 Capture(main,Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"system-monitor-main-light.png"));

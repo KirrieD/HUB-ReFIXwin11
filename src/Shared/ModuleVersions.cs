@@ -2,7 +2,7 @@ namespace ReFix.Shared
 {
     public static class ModuleVersions
     {
-        public const string SystemMonitor = "1.0.2";
+        public const string SystemMonitor = "1.0.3";
         public const string SystemMonitorMinHub = "1.5.1";
         public const string QuietMixer = "1.5.2";
         public const string QuickNote = "1.6.2";
