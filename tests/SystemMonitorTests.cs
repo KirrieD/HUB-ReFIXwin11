@@ -47,7 +47,7 @@ namespace ReFix.Tests
                 Check("configuration normalizes sampling and history bounds",loaded.IntervalSeconds==1&&loaded.HistorySeconds==1200&&loaded.Scale==1);
                 var now=DateTime.UtcNow;
                 var timeline=Controller.Timeline(new Dictionary<string,List<double?>>{{"cpu",new List<double?>{10,20,30}}},new Dictionary<string,List<DateTime>>{{"cpu",new List<DateTime>{now.AddSeconds(-10),now.AddSeconds(-5),now}}},now,30,1)["cpu"];
-                Check("history preserves elapsed spacing and breaks unmeasured intervals",timeline.Count==31&&timeline[20]==10&&timeline[25]==20&&timeline[30]==30&&!timeline[26].HasValue);
+                Check("history preserves elapsed spacing and leaves unmeasured slots empty",timeline.Count==31&&timeline[20]==10&&timeline[25]==20&&timeline[30]==30&&!timeline[26].HasValue);
                 Snapshot sample;
                 using(var collector=new Collector())
                 {
@@ -67,6 +67,19 @@ namespace ReFix.Tests
                 Check("desktop summary is compact",compact.Width<=350&&compact.Height<=280&&!compact.ShowInTaskbar);
                 var spark=Find<Sparkline>(compact,s=>true);
                 Check("summary charts use readable area lines and initial history fills available width",spark!=null&&spark.ActualWidth>=65&&spark.ActualHeight>=20&&spark.FillArea&&spark.TrimLeadingMissing);
+                spark.FitRange=false;
+                spark.TrimLeadingMissing=false;
+                spark.Update(new double?[]{null,50,null,null,50,null});
+                Pump();
+                var drawings=VisualTreeHelper.GetDrawing(spark).Children.OfType<GeometryDrawing>().ToArray();
+                var midpoint=new Point(spark.ActualWidth/2,spark.ActualHeight/2);
+                var below=new Point(midpoint.X,spark.ActualHeight*.8);
+                Check("line and area bridge missing history slots",
+                    drawings.Any(d=>d.Pen!=null&&d.Geometry.StrokeContains(d.Pen,midpoint))&&
+                    drawings.Any(d=>d.Brush!=null&&d.Geometry.FillContains(below)));
+                Check("chart does not extend beyond the measured interval",
+                    drawings.All(d=>d.Geometry.Bounds.IsEmpty||d.Geometry.Bounds.Left>0&&d.Geometry.Bounds.Right<spark.ActualWidth));
+                compact.Update(sample,histories);Pump();
                 var texts=Find<StackPanel>(compact,p=>p.Children.OfType<Grid>().Count()==4);
                 Check("summary uses four aligned single-line metric rows",texts!=null&&texts.Children.OfType<Grid>().All(g=>g.ColumnDefinitions.Count==4));
 
@@ -80,6 +93,9 @@ namespace ReFix.Tests
                 Find<TabControl>(main,t=>t.Items.Count==3).SelectedIndex=2;Pump();
                 var grid=Find<DataGrid>(main,g=>g.Columns.Count>=6);
                 Check("resource consumers expose measured columns",grid!=null&&grid.Items.Count>0);
+                double nameWidth=grid.Columns[0].ActualWidth;
+                main.Width+=150;main.UpdateLayout();Pump();
+                Check("process name column uses extra space instead of an empty gutter",grid.Columns[0].ActualWidth>nameWidth+100);
                 Find<TabControl>(main,t=>t.Items.Count==3).SelectedIndex=0;Pump();
                 main.ApplyTheme(new ThemeProfile{Mode="Custom",Background="#FFFFFF",Foreground="#111111"});main.Update(sample,histories);Pump();
                 Capture(main,Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"system-monitor-main-light.png"));

@@ -6,7 +6,7 @@ using System.Windows.Media;
 
 namespace ReFix.SystemMonitor
 {
-    // One retained drawing per sample update. Missing samples break the line.
+    // One retained drawing per sample update. Missing history slots preserve spacing between valid readings.
     internal sealed class Sparkline : FrameworkElement
     {
         IList<double?> samples = new List<double?>();
@@ -27,58 +27,65 @@ namespace ReFix.SystemMonitor
                 var gridPen = new Pen(grid, .5);
                 for (int i=1;i<4;i++) dc.DrawLine(gridPen,new Point(0,h*i/4),new Point(w,h*i/4));
             }
-            int first=0;
-            if(TrimLeadingMissing)while(first<samples.Count&&!samples[first].HasValue)first++;
-            if(first>=samples.Count)return;
-            if(samples.Count-first<2)return;
-            double low=0, high=100;
-            if(FitRange)
+            int first = 0;
+            while (first < samples.Count && !Valid(samples[first])) first++;
+            if (first >= samples.Count - 1) return;
+
+            double low = 0, high = 100;
+            if (FitRange)
             {
-                var values=samples.Where(n=>n.HasValue&&!Double.IsNaN(n.Value)&&!Double.IsInfinity(n.Value)).Select(n=>Math.Max(0,Math.Min(100,n.Value))).ToArray();
-                if(values.Length>0)
-                {
-                    low=Math.Max(0,values.Min()-3);
-                    high=Math.Min(100,Math.Max(low+10,values.Max()+3));
-                    low=Math.Max(0,Math.Min(low,high-10));
-                }
+                var values = samples.Where(Valid).Select(n => Math.Max(0, Math.Min(100, n.Value))).ToArray();
+                low = Math.Max(0, values.Min() - 3);
+                high = Math.Min(100, Math.Max(low + 10, values.Max() + 3));
+                low = Math.Max(0, Math.Min(low, high - 10));
             }
-            var geometry = new StreamGeometry();
-            using(var context=geometry.Open()) {
-                bool connected=false;
-                for(int i=first;i<samples.Count;i++) {
-                    double? value=samples[i];
-                    if(!value.HasValue||Double.IsNaN(value.Value)||Double.IsInfinity(value.Value)){connected=false;continue;}
-                    var point=new Point(w*(i-first)/(samples.Count-first-1),h-(h-2)*(Math.Max(low,Math.Min(high,value.Value))-low)/(high-low)-1);
-                    if(!connected){context.BeginFigure(point,false,false);connected=true;}else context.LineTo(point,true,false);
-                }
-            }
-            if(FillArea)
+
+            // Keep the time axis; connect the real readings across empty slots.
+            int origin = TrimLeadingMissing ? first : 0;
+            var points = new List<Point>();
+            for (int i = first; i < samples.Count; i++)
             {
-                var area=new StreamGeometry();
-                using(var context=area.Open())
+                double? value = samples[i];
+                if (!Valid(value)) continue;
+                double x = w * (i - origin) / (samples.Count - origin - 1);
+                double fraction = (Math.Max(low, Math.Min(high, value.Value)) - low) / (high - low);
+                points.Add(new Point(x, h - (h - 2) * fraction - 1));
+            }
+            if (points.Count < 2) return;
+
+            var line = new StreamGeometry();
+            using (var context = line.Open())
+            {
+                context.BeginFigure(points[0], false, false);
+                for (int i = 1; i < points.Count; i++) context.LineTo(points[i], true, false);
+            }
+            line.Freeze();
+
+            if (FillArea)
+            {
+                var area = new StreamGeometry();
+                using (var context = area.Open())
                 {
-                    int start=first;
-                    while(start<samples.Count)
-                    {
-                        while(start<samples.Count&&(!samples[start].HasValue||Double.IsNaN(samples[start].Value)||Double.IsInfinity(samples[start].Value)))start++;
-                        if(start>=samples.Count)break;
-                        int end=start;
-                        while(end+1<samples.Count&&samples[end+1].HasValue&&!Double.IsNaN(samples[end+1].Value)&&!Double.IsInfinity(samples[end+1].Value))end++;
-                        double left=w*(start-first)/(samples.Count-first-1);
-                        context.BeginFigure(new Point(left,h),true,true);
-                        for(int i=start;i<=end;i++)
-                            context.LineTo(new Point(w*(i-first)/(samples.Count-first-1),h-(h-2)*(Math.Max(low,Math.Min(high,samples[i].Value))-low)/(high-low)-1),true,false);
-                        context.LineTo(new Point(w*(end-first)/(samples.Count-first-1),h),true,false);
-                        start=end+1;
-                    }
+                    context.BeginFigure(new Point(points[0].X, h), true, true);
+                    context.PolyLineTo(points, true, false);
+                    context.LineTo(new Point(points[points.Count - 1].X, h), true, false);
                 }
                 area.Freeze();
-                var brush=LineBrush.CloneCurrentValue();brush.Opacity=.16;
-                dc.DrawGeometry(brush,null,area);
+                var brush = LineBrush.CloneCurrentValue();
+                brush.Opacity = .16;
+                dc.DrawGeometry(brush, null, area);
             }
-            geometry.Freeze();
-            var pen=new Pen(LineBrush,1.7){StartLineCap=PenLineCap.Round,EndLineCap=PenLineCap.Round,LineJoin=PenLineJoin.Round};
-            dc.DrawGeometry(null,pen,geometry);
+
+            var pen = new Pen(LineBrush, 1.7)
+            {
+                StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round
+            };
+            dc.DrawGeometry(null, pen, line);
+        }
+
+        static bool Valid(double? value)
+        {
+            return value.HasValue && !Double.IsNaN(value.Value) && !Double.IsInfinity(value.Value);
         }
     }
 }
