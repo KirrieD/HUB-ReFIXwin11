@@ -17,6 +17,8 @@ namespace ReFix.QuickNote
         public bool Markdown { get; set; }
         public string TopHint { get; set; }
         public string BottomHint { get; set; }
+        public string WorkspaceColor { get; set; }
+        public int IndentStep { get; set; }
     }
 
     public sealed class NoteList

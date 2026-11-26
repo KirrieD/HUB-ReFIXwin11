@@ -14,7 +14,9 @@ namespace ReFix.QuickNote
     {
         public string Marker { get; set; }
         public int StartIndex { get; set; }
+        public double LeftIndent { get; set; }
         public List<List<NoteParagraph>> Items { get; set; }
+        public double[] ItemLeftIndents { get; set; }
         public double Size { get; set; }
         public bool Heading { get; set; }
         public string Alignment { get; set; }
@@ -50,10 +52,17 @@ namespace ReFix.QuickNote
             {
                 var paragraph = block as Paragraph;
                 if (paragraph != null)
-                    result.Add(new NoteParagraph { Size = paragraph.FontSize, Alignment = paragraph.TextAlignment.ToString(), Heading = paragraph.FontWeight >= FontWeights.SemiBold, Parts = CaptureInlines(paragraph.Inlines).ToList() });
+                    result.Add(new NoteParagraph { Size = paragraph.FontSize, LeftIndent = double.IsNaN(paragraph.Margin.Left) ? 0 : paragraph.Margin.Left, Alignment = paragraph.TextAlignment.ToString(), Heading = paragraph.FontWeight >= FontWeights.SemiBold, Parts = CaptureInlines(paragraph.Inlines).ToList() });
                 var list = block as System.Windows.Documents.List;
                 if (list != null)
-                    result.Add(new NoteParagraph { Marker = list.MarkerStyle.ToString(), StartIndex = list.StartIndex, Items = list.ListItems.Select(item => CaptureBlocks(item.Blocks)).ToList() });
+                    result.Add(new NoteParagraph
+                    {
+                        Marker = list.MarkerStyle.ToString(),
+                        StartIndex = list.StartIndex,
+                        Items = list.ListItems.Select(item => CaptureBlocks(item.Blocks)).ToList(),
+                        ItemLeftIndents = list.ListItems.Any(item => item.Margin.Left > 0)
+                            ? list.ListItems.Select(item => item.Margin.Left > 0 ? item.Margin.Left : 0).ToArray() : null
+                    });
             }
             return result;
         }
@@ -130,10 +139,16 @@ namespace ReFix.QuickNote
 
         static string LocalColor(TextElement element, DependencyProperty property)
         {
+            var brush = LocalBrush(element, property) as SolidColorBrush;
+            return brush == null ? null : brush.Color.ToString();
+        }
+
+        internal static Brush LocalBrush(TextElement element, DependencyProperty property)
+        {
             for (var current = element; current != null; current = current.Parent as TextElement)
             {
-                var brush = current.ReadLocalValue(property) as SolidColorBrush;
-                if (brush != null) return brush.Color.ToString();
+                var brush = current.ReadLocalValue(property) as Brush;
+                if (brush != null) return brush;
             }
             return null;
         }
@@ -163,10 +178,12 @@ namespace ReFix.QuickNote
                     TextMarkerStyle marker;
                     if (!Enum.TryParse(record.Marker, out marker) || !Enum.IsDefined(typeof(TextMarkerStyle), marker)) marker = TextMarkerStyle.Disc;
                     var list = new System.Windows.Documents.List { MarkerStyle = marker, StartIndex = Math.Max(1, record.StartIndex) };
-                    foreach (var item in record.Items)
+                    for (int i = 0; i < record.Items.Count; i++)
                     {
                         var listItem = new ListItem();
-                        foreach (var block in RestoreBlocks(item)) listItem.Blocks.Add(block);
+                        if (record.ItemLeftIndents != null && i < record.ItemLeftIndents.Length && record.ItemLeftIndents[i] > 0)
+                            listItem.Margin = new Thickness(Math.Min(720, record.ItemLeftIndents[i]), 0, 0, 0);
+                        foreach (var block in RestoreBlocks(record.Items[i])) listItem.Blocks.Add(block);
                         list.ListItems.Add(listItem);
                     }
                     yield return list;
@@ -175,6 +192,7 @@ namespace ReFix.QuickNote
                 TextAlignment alignment;
                 if (!Enum.TryParse(record.Alignment, out alignment) || !Enum.IsDefined(typeof(TextAlignment), alignment)) alignment = TextAlignment.Left;
                 var paragraph = new Paragraph { TextAlignment = alignment, FontSize = FontSize(record.Size), FontWeight = record.Heading ? FontWeights.SemiBold : FontWeights.Normal };
+                if (record.LeftIndent > 0) paragraph.Margin = new Thickness(Math.Min(480, record.LeftIndent), 0, 0, 0);
                 foreach (var part in record.Parts)
                 {
                     if (part.Break) paragraph.Inlines.Add(new LineBreak());

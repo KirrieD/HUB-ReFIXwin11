@@ -19,18 +19,43 @@ namespace ReFix.QuickNote
         readonly Dictionary<string, NoteWorkspace> workspaces = new Dictionary<string, NoteWorkspace>();
         readonly Dictionary<string, ListWindow> lists = new Dictionary<string, ListWindow>();
         readonly System.Windows.Threading.Dispatcher dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
-        bool disposed;
+        bool disposed, showDesktopTabs;
 
         internal NoteController(Library library, ThemeStore themes, ControlsStore controls)
         {
             this.library = library;
             this.themes = themes;
             this.controls = controls;
+            showDesktopTabs = controls.Current.ShowQuickNoteDesktopTabs;
+            controls.Changed += DesktopPreferenceChanged;
             themes.Changed += ThemeChanged;
             SystemEvents.DisplaySettingsChanged += DisplayChanged;
         }
 
-        internal void Show() { foreach (var list in library.Index.Lists) ShowList(list); }
+        internal void Show()
+        {
+            if (controls.Current.ShowQuickNoteDesktopTabs) ShowDesktopTabs();
+            else OpenList(library.Index.Lists[0]);
+        }
+
+        internal void ShowDesktopTabs()
+        {
+            foreach (var list in library.Index.Lists) ShowList(list);
+        }
+
+        void DesktopPreferenceChanged(object sender, EventArgs e)
+        {
+            if (dispatcher.HasShutdownStarted) return;
+            dispatcher.BeginInvoke(new Action(delegate
+            {
+                if (disposed) return;
+                bool enabled = controls.Current.ShowQuickNoteDesktopTabs;
+                if (enabled == showDesktopTabs) return;
+                showDesktopTabs = enabled;
+                if (enabled) ShowDesktopTabs();
+                else foreach (var window in lists.Values) window.Hide();
+            }));
+        }
 
         internal void Toggle()
         {
@@ -42,6 +67,7 @@ namespace ReFix.QuickNote
 
         void ShowList(NoteList list)
         {
+            if (!controls.Current.ShowQuickNoteDesktopTabs) return;
             ListWindow window;
             if (!lists.TryGetValue(list.Id, out window))
             {
@@ -213,6 +239,7 @@ namespace ReFix.QuickNote
         public void Dispose()
         {
             disposed = true;
+            controls.Changed -= DesktopPreferenceChanged;
             themes.Changed -= ThemeChanged;
             SystemEvents.DisplaySettingsChanged -= DisplayChanged;
             foreach (var window in workspaces.Values) window.Dispose();

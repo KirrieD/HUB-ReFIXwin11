@@ -183,12 +183,23 @@ namespace ReFix.Hub
             string title=operation==BulkOperation.Install?"Установка":operation==BulkOperation.Update?"Обновление":operation==BulkOperation.Enable?"Включение":operation==BulkOperation.Disable?"Выключение":"Удаление";
             try
             {
-                var result=await BulkModuleActions.RunAsync(targets,operation,async delegate(ModuleView view){if(operation==BulkOperation.Install)await manager.InstallAsync(view);else if(operation==BulkOperation.Update)await manager.UpdateAsync(view);else if(operation==BulkOperation.Enable)await manager.StartAsync(view);else if(operation==BulkOperation.Disable)await manager.StopAsync(view);else{await manager.UninstallAsync(view);ClearStartup(controls,view.Manifest.Id);}},delegate(ModuleView view,int index,int count){SetNotice(title+" "+index+" из "+count+": "+view.Manifest.Name+"…");});
+                var result=await BulkModuleActions.RunAsync(targets,operation,async delegate(ModuleView view){if(operation==BulkOperation.Install)await manager.InstallAsync(view);else if(operation==BulkOperation.Update)await manager.UpdateAsync(view);else if(operation==BulkOperation.Enable||operation==BulkOperation.Disable)await ToggleModule(manager,controls,view,operation==BulkOperation.Enable);else{await manager.UninstallAsync(view);SetStartup(controls,view.Manifest.Id,false);}},delegate(ModuleView view,int index,int count){SetNotice(title+" "+index+" из "+count+": "+view.Manifest.Name+"…");});
                 SetNotice(title+": выполнено "+result.Completed+" из "+targets.Length+(result.Errors.Count==0?".":". Ошибки: "+String.Join("; ",result.Errors)));
             }
             finally{batchBusy=false;Filter();}
         }
-        internal static void ClearStartup(ControlsStore controls,string id){if(id!="quiet-mixer"&&id!="task-menu"&&id!="mini-icons")return;var p=controls.Current;if(id=="quiet-mixer")p.StartMixerWithHub=false;else if(id=="task-menu")p.StartTaskMenuWithHub=false;else p.StartMiniIconsWithHub=false;controls.Save(p);}
+        internal static async Task ToggleModule(ModuleManager manager,ControlsStore controls,ModuleView view,bool enabled)
+        {
+            if(enabled)await manager.StartAsync(view);else await manager.StopAsync(view);
+            SetStartup(controls,view.Manifest.Id,enabled);
+        }
+        internal static void SetStartup(ControlsStore controls,string id,bool enabled)
+        {
+            var profile=controls.Current;
+            if(profile.StartsWithHub(id)==enabled)return;
+            profile.SetModuleStartup(id,enabled);
+            controls.Save(profile);
+        }
         internal void SetNotice(string text) { if(!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(delegate { SetNotice(text); })); return; } notice.Text=text; notice.ToolTip=text; }
         private void ThemeChanged(object sender,EventArgs e) { if(!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(delegate{ApplyTheme();if(!string.IsNullOrEmpty(themes.LastError))SetNotice("Не удалось сохранить оформление: "+themes.LastError);})); }
         private void ApplyTheme() { Ui.Apply(this,themes.Current,frame,image);foreach(ModuleCard card in views)card.ApplyPreview(themes.Current); }
@@ -201,7 +212,7 @@ namespace ReFix.Hub
         }
         internal void OpenBehavior()
         {
-            if(behaviorEditor==null){behaviorEditor=new BehaviorWindow(themes,controls,id=>manager.Modules.Any(m=>m.Manifest.Id==id&&!string.IsNullOrEmpty(m.InstalledVersion)),async delegate{var mini=manager.Modules.FirstOrDefault(m=>m.Manifest.Id=="mini-icons");if(mini==null||string.IsNullOrEmpty(mini.InstalledVersion))throw new InvalidOperationException("Сначала установите Мини значки.");await manager.RefreshStatesAsync();if(mini.State!="ON")await manager.StartAsync(mini);await manager.SettingsAsync(mini);});behaviorEditor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(behaviorEditor);behaviorEditor.Closed+=delegate{behaviorEditor=null;};}
+            if(behaviorEditor==null){behaviorEditor=new BehaviorWindow(themes,controls,id=>manager.Modules.Any(m=>m.Manifest.Id==id&&!string.IsNullOrEmpty(m.InstalledVersion)),async delegate{var mini=manager.Modules.FirstOrDefault(m=>m.Manifest.Id=="mini-icons");if(mini==null||string.IsNullOrEmpty(mini.InstalledVersion))throw new InvalidOperationException("Сначала установите Мини значки.");await manager.RefreshStatesAsync();if(mini.State!="ON")await manager.StartAsync(mini);await manager.SettingsAsync(mini);},()=>manager.Modules);behaviorEditor.Owner=this;System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(behaviorEditor);behaviorEditor.Closed+=delegate{behaviorEditor=null;};}
             SettingsPlacement.Place(this,behaviorEditor);behaviorEditor.Show();behaviorEditor.Activate();
         }
         internal BehaviorWindow BehaviorEditor{get{return behaviorEditor;}}
@@ -314,13 +325,12 @@ namespace ReFix.Hub
             string message="Удалить «"+View.Manifest.Name+"»? Работающая утилита будет остановлена. Личные данные и оформление сохранятся.";
             MessageBoxResult decision=owner==null?MessageBox.Show(message,"Удаление утилиты",MessageBoxButton.YesNo,MessageBoxImage.Question):MessageBox.Show(owner,message,"Удаление утилиты",MessageBoxButton.YesNo,MessageBoxImage.Question);
             if(decision!=MessageBoxResult.Yes)return;
-            Run(async delegate { await manager.UninstallAsync(View);HubWindow.ClearStartup(controls,View.Manifest.Id); });
+            Run(async delegate { await manager.UninstallAsync(View);HubWindow.SetStartup(controls,View.Manifest.Id,false); });
         }
         private void InvokePrimary(){Run(async delegate
         {
             if(View.State=="NO"){await manager.InstallAsync(View);return;}
-            bool enable=View.State!="ON";if(enable)await manager.StartAsync(View);else await manager.StopAsync(View);
-            if(View.Manifest.Id=="quiet-mixer"||View.Manifest.Id=="task-menu"||View.Manifest.Id=="mini-icons"){ControlsProfile profile=controls.Current;if(View.Manifest.Id=="quiet-mixer")profile.StartMixerWithHub=enable;else if(View.Manifest.Id=="task-menu")profile.StartTaskMenuWithHub=enable;else profile.StartMiniIconsWithHub=enable;controls.Save(profile);}
+            bool enable=View.State!="ON";await HubWindow.ToggleModule(manager,controls,View,enable);
             if(enable&&View.Manifest.Kind=="process")await manager.ShowAsync(View);
         });}
         internal void ApplyPreview(ThemeProfile profile){previewWindow.ApplyTheme(profile);}

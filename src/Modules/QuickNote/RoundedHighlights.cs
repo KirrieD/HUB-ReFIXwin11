@@ -27,6 +27,13 @@ namespace ReFix.QuickNote
             editor.IsVisibleChanged += delegate { InvalidateVisual(); };
         }
 
+        internal void RefreshColors()
+        {
+            dirty = true;
+            editor.UpdateLayout();
+            InvalidateVisual();
+        }
+
         protected override void OnRender(DrawingContext context)
         {
             base.OnRender(context);
@@ -38,7 +45,7 @@ namespace ReFix.QuickNote
                 foreach (var paragraph in NoteDocument.Paragraphs(editor.Document.Blocks))
                     foreach (var run in NoteDocument.Runs(paragraph.Inlines))
                     {
-                        var brush = run.Background as SolidColorBrush;
+                        var brush = NoteDocument.LocalBrush(run, TextElement.BackgroundProperty) as SolidColorBrush;
                         if (brush != null && brush.Color.A != 0 && brush.Opacity == 0) colored.Add(run);
                     }
             }
@@ -54,7 +61,7 @@ namespace ReFix.QuickNote
             var spans = new List<Tuple<TextPointer,TextPointer,Color>>();
             foreach (var run in colored)
             {
-                var brush = run.Background as SolidColorBrush;
+                var brush = NoteDocument.LocalBrush(run, TextElement.BackgroundProperty) as SolidColorBrush;
                 if (brush != null && brush.Color.A != 0 && brush.Opacity == 0)
                     spans.Add(Tuple.Create(run.ContentStart, run.ContentEnd, brush.Color));
             }

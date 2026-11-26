@@ -39,6 +39,14 @@ namespace ReFix.QuickNote
             toggle.MinWidth = 20;
             DockPanel.SetDock(toggle, Dock.Right);
             header.Children.Add(toggle);
+            var add = NoteEditor.Button("+", () => controller.NewNote(list));
+            add.Margin = new Thickness(0, 0, 3, 0);
+            add.Padding = toggle.Padding;
+            add.MinWidth = toggle.MinWidth;
+            add.ToolTip = "Новая заметка";
+            System.Windows.Automation.AutomationProperties.SetName(add, "Новая заметка");
+            DockPanel.SetDock(add, Dock.Right);
+            header.Children.Add(add);
             title = new TextBlock { FontSize = 15, Margin = new Thickness(6, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Cursor = Cursors.SizeAll };
             title.ToolTip = "Перетащить список";
             Point dragStart = new Point();

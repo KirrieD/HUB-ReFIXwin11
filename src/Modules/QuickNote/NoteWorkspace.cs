@@ -38,7 +38,12 @@ namespace ReFix.QuickNote
             DockPanel.SetDock(commands, Dock.Right);
             top.Children.Add(commands);
             heading = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8,0,0,0) };
-            heading.MouseLeftButtonDown += delegate { if (Mouse.LeftButton == MouseButtonState.Pressed && WindowState == WindowState.Normal) DragMove(); };
+            top.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e)
+            {
+                if (commands.IsMouseOver || e.ButtonState != MouseButtonState.Pressed || WindowState != WindowState.Normal) return;
+                e.Handled = true;
+                DragMove();
+            };
             top.Children.Add(heading);
             DockPanel.SetDock(top, Dock.Top);
             root.Children.Add(top);

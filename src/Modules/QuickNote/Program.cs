@@ -35,17 +35,19 @@ namespace ReFix.QuickNote
                 {
                     Action stop = delegate { if (controller.SaveAll()) app.Shutdown(); };
                     source.AddHook(delegate(IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled) { handled = keys.ProcessMessage(msg, w); return IntPtr.Zero; });
-                    menu.Items.Add("Показать списки", null, delegate { controller.Show(); });
-                    menu.Items.Add("Новая заметка", null, delegate { controller.NewNote(library.Index.Lists[0]); });
+                    menu.Items.Add("Открыть заметки", null, delegate { controller.Show(); });
+                    Action newNote = delegate { controller.NewNote(library.Index.Lists[0]); };
+                    menu.Items.Add("Новая заметка", null, delegate { newNote(); });
                     menu.Items.Add("Выйти", null, delegate { stop(); });
                     tray.ContextMenuStrip = menu;
                     tray.MouseClick += delegate(object sender, System.Windows.Forms.MouseEventArgs e) { if (e.Button == System.Windows.Forms.MouseButtons.Left) controller.Show(); };
                     using (var miniTray = new MiniTrayClient(Paths.Root, "quick-note", "Быстрая заметка", ModuleVersions.QuickNote, tray, controller.Show, (x, y) => menu.Show(x, y), themes))
-                    using (var runtime = new ModuleRuntime("quick-note", delegate { app.Dispatcher.BeginInvoke(new Action(controller.Show)); }, delegate { app.Dispatcher.BeginInvoke(stop); }))
+                    using (var runtime = new ModuleRuntime("quick-note", delegate { app.Dispatcher.BeginInvoke(new Action(controller.Show)); }, delegate { app.Dispatcher.BeginInvoke(stop); }, null, delegate { app.Dispatcher.BeginInvoke(newNote); }))
                     {
                         app.SessionEnding += delegate(object sender, SessionEndingCancelEventArgs e) { e.Cancel = !controller.SaveAll(); };
                         runtime.Start();
                         if (Array.IndexOf(args, "--background") < 0) app.Dispatcher.BeginInvoke(new Action(controller.Show));
+                        else if (Array.IndexOf(args, "--desktop-tabs") >= 0) app.Dispatcher.BeginInvoke(new Action(controller.ShowDesktopTabs));
                         app.Run();
                     }
                 }

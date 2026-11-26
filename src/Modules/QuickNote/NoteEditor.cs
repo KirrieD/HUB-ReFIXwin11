@@ -25,6 +25,7 @@ namespace ReFix.QuickNote
         readonly DispatcherTimer autosave;
         readonly RoundedHighlights highlights;
         readonly DockPanel root;
+        readonly Grid page;
         readonly WrapPanel tools;
         bool bodyDirty, metadataDirty, disposed, saveFailed;
 
@@ -59,11 +60,11 @@ namespace ReFix.QuickNote
             tools.Children.Add(FormatButton("I", "Курсив", () => EditingCommands.ToggleItalic.Execute(null, editor), FontWeights.Normal, FontStyles.Italic, null));
             tools.Children.Add(FormatButton("S", "Зачёркивание", () => ToggleDecoration(TextDecorationLocation.Strikethrough, TextDecorations.Strikethrough[0]), FontWeights.Normal, FontStyles.Normal, TextDecorations.Strikethrough));
             tools.Children.Add(FormatButton("P", "Подчёркивание", () => ToggleDecoration(TextDecorationLocation.Underline, TextDecorations.Underline[0]), FontWeights.Normal, FontStyles.Normal, TextDecorations.Underline));
-            tools.Children.Add(FormatButton("• ≡", "Маркированный список", () => EditingCommands.ToggleBullets.Execute(null, editor), FontWeights.Normal, FontStyles.Normal, null));
-            tools.Children.Add(FormatButton("1. ≡", "Нумерованный список", () => EditingCommands.ToggleNumbering.Execute(null, editor), FontWeights.Normal, FontStyles.Normal, null));
+            tools.Children.Add(FormatButton("• ≡", "Маркированный список", () => ToggleList(EditingCommands.ToggleBullets), FontWeights.Normal, FontStyles.Normal, null));
+            tools.Children.Add(FormatButton("1. ≡", "Нумерованный список", () => ToggleList(EditingCommands.ToggleNumbering), FontWeights.Normal, FontStyles.Normal, null));
             Button textColor = null, background = null;
             textColor = Button("Цвет текста", () => Palette(textColor, TextElement.ForegroundProperty));
-            background = Button("Цвет фона", () => Palette(background, TextElement.BackgroundProperty));
+            background = Button("Цвет фона текста", () => Palette(background, TextElement.BackgroundProperty));
             tools.Children.Add(textColor);
             tools.Children.Add(background);
             tools.Children.Add(Button("Вставить изображение", SelectImages));
@@ -83,8 +84,8 @@ namespace ReFix.QuickNote
             editor.SetResourceReference(Control.BorderBrushProperty, "Hub.Border");
             editor.Document.FontSize = 15;
             library.LoadBody(note, editor.Document);
-            var page = new Grid { ClipToBounds = true };
-            page.SetResourceReference(Panel.BackgroundProperty, "Hub.Surface");
+            page = new Grid { ClipToBounds = true };
+            ApplyWorkspaceColor();
             page.Children.Add(editor);
             highlights = new RoundedHighlights(editor);
             Panel.SetZIndex(highlights, -1);
@@ -110,6 +111,8 @@ namespace ReFix.QuickNote
             controls.Changed += ControlsChanged;
             PreviewKeyDown += HandleKey;
             ConfigureWorkspace();
+            AddWorkspaceColorButton();
+            if (!note.Markdown) ConfigureListInput();
             UpdateStatus();
         }
 
@@ -206,18 +209,43 @@ namespace ReFix.QuickNote
         void Palette(Button button, DependencyProperty property)
         {
             var range = new TextRange(editor.Selection.Start, editor.Selection.End);
+            Palette(button, color => ApplyColor(range, property, color));
+        }
+
+        void AddWorkspaceColorButton()
+        {
+            Button button = null;
+            button = Button("Цвет фона рабочей области", () => Palette(button, color =>
+            {
+                note.WorkspaceColor = color;
+                ApplyWorkspaceColor();
+                metadataDirty = true;
+                QueueSave();
+            }));
+            tools.Children.Add(button);
+        }
+
+        void ApplyWorkspaceColor()
+        {
+            string color;
+            if (note.WorkspaceColor != null && TryColor(note.WorkspaceColor, out color)) page.Background = BrushFor(color);
+            else page.SetResourceReference(Panel.BackgroundProperty, "Hub.Surface");
+        }
+
+        void Palette(Button button, Action<string> applyColor)
+        {
             var menu = ThemeMenu.Create(Window.GetWindow(this).Resources);
             menu.PlacementTarget = button;
             menu.Items.Add(new MenuItem { Header = "Стандартные цвета", IsEnabled = false });
-            AddSwatches(menu, new[] { "#000000", "#FFFFFF", "#808080", "#C00000", "#FF0000", "#FFC000", "#FFFF00", "#92D050", "#00B050", "#00B0F0", "#0070C0", "#002060", "#7030A0", "#FF66AA" }, color => ApplyColor(range, property, color));
+            AddSwatches(menu, new[] { "#000000", "#FFFFFF", "#808080", "#C00000", "#FF0000", "#FFC000", "#FFFF00", "#92D050", "#00B050", "#00B0F0", "#0070C0", "#002060", "#7030A0", "#FF66AA" }, applyColor);
             if (library.Index.Colors.Count > 0)
             {
                 menu.Items.Add(new Separator());
                 menu.Items.Add(new MenuItem { Header = "Последние пользовательские цвета", IsEnabled = false });
-                AddSwatches(menu, library.Index.Colors, color => ApplyColor(range, property, color));
+                AddSwatches(menu, library.Index.Colors, applyColor);
             }
             var clear = new MenuItem { Header = "Сбросить цвет" };
-            clear.Click += delegate { range.ApplyPropertyValue(property, property == TextElement.ForegroundProperty ? editor.Foreground : Brushes.Transparent); bodyDirty = true; QueueSave(); };
+            clear.Click += delegate { applyColor(null); };
             menu.Items.Add(clear);
             var custom = new MenuItem { Header = "Свой цвет · RGB / HEX…" };
             custom.Click += delegate
@@ -238,7 +266,7 @@ namespace ReFix.QuickNote
                 library.Index.Colors.Insert(0, chosen);
                 if (library.Index.Colors.Count > 20) library.Index.Colors.RemoveAt(20);
                 metadataDirty = true;
-                ApplyColor(range, property, chosen);
+                applyColor(chosen);
             };
             menu.Items.Add(custom);
             menu.IsOpen = true;
@@ -280,9 +308,13 @@ namespace ReFix.QuickNote
         void ApplyColor(TextRange range, DependencyProperty property, string hex)
         {
             editor.Focus();
-            var brush = property == TextElement.BackgroundProperty ? NoteDocument.Highlight((Color)ColorConverter.ConvertFromString(hex)) : BrushFor(hex);
+            Brush brush;
+            if (hex == null) brush = property == TextElement.ForegroundProperty ? editor.Foreground : Brushes.Transparent;
+            else brush = property == TextElement.BackgroundProperty ? NoteDocument.Highlight((Color)ColorConverter.ConvertFromString(hex)) : BrushFor(hex);
+            if (range.IsEmpty) editor.Selection.Select(range.Start, range.End);
             if (range.IsEmpty) editor.Selection.ApplyPropertyValue(property, brush);
             else range.ApplyPropertyValue(property, brush);
+            if (property == TextElement.BackgroundProperty) highlights.RefreshColors();
             bodyDirty = true;
             QueueSave();
         }

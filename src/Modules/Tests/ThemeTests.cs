@@ -128,6 +128,15 @@ internal static class ModuleThemeTests
                     rendered.Render(workspace);
                     var drawing=System.Windows.Media.VisualTreeHelper.GetDrawing(layer);
                     Require(drawing!=null&&!drawing.Bounds.IsEmpty,"Rounded text highlight must render in the tab");
+                    var highlighted=NoteDocument.Paragraphs(editor.Document.Blocks).SelectMany(p=>NoteDocument.Runs(p.Inlines)).First(run=>!String.IsNullOrEmpty(run.Text));
+                    var range=new TextRange(highlighted.ContentStart,highlighted.ContentEnd);
+                    typeof(NoteEditor).GetMethod("ApplyColor",fields).Invoke(noteEditor,new object[]{range,TextElement.BackgroundProperty,"#199B72"});
+                    var renderFrame=new System.Windows.Threading.DispatcherFrame();
+                    workspace.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,new Action(delegate{renderFrame.Continue=false;}));
+                    System.Windows.Threading.Dispatcher.PushFrame(renderFrame);
+                    rendered.Render(workspace);
+                    drawing=System.Windows.Media.VisualTreeHelper.GetDrawing(layer);
+                    Require(drawing!=null&&ContainsHighlight(drawing,System.Windows.Media.Color.FromRgb(25,155,114)),"Palette change redraws the rounded highlight without leaving the editor");
                     Require(lists[other.Id].ActualWidth<150,"Desktop list tab must be compact");
                     var png=new System.Windows.Media.Imaging.PngBitmapEncoder();
                     png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rendered));
@@ -140,6 +149,7 @@ internal static class ModuleThemeTests
                     tabs.SelectedIndex=0;tabs.SelectedIndex=1;
                     Require(Object.ReferenceEquals(editor,Editor(controller.Editor(record))),"Tab switching must keep the editor and its undo stack");
                     VerifyWorkspaceFeatures(controller.Editor(record),Paths.Root);
+                    VerifyListEditing(controller.Editor(record));
                 }
                 }
                 System.IO.Directory.Delete(Paths.Root,true);
@@ -153,6 +163,63 @@ internal static class ModuleThemeTests
     }
     static RichTextBox Editor(NoteEditor note){return (RichTextBox)typeof(NoteEditor).GetField("editor",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(note);}
     static string Plain(RichTextBox editor){return new TextRange(editor.Document.ContentStart,editor.Document.ContentEnd).Text.TrimEnd('\r','\n');}
+    static bool ContainsHighlight(System.Windows.Media.Drawing drawing,System.Windows.Media.Color color)
+    {
+        var group=drawing as System.Windows.Media.DrawingGroup;
+        if(group!=null)return group.Children.Any(item=>ContainsHighlight(item,color));
+        var geometry=drawing as System.Windows.Media.GeometryDrawing;
+        var brush=geometry==null?null:geometry.Brush as System.Windows.Media.SolidColorBrush;
+        return brush!=null&&brush.Color==color;
+    }
+
+    static void VerifyListEditing(NoteEditor note)
+    {
+        var editor=Editor(note);
+        var fields=BindingFlags.Instance|BindingFlags.NonPublic;
+        var startList=typeof(NoteEditor).GetMethod("TryStartList",fields);
+        var changeIndent=typeof(NoteEditor).GetMethod("ChangeIndent",fields);
+        foreach(var prefix in new[]{"3.","-","*"})
+        {
+            var paragraph=new Paragraph(new Run(prefix));
+            editor.Document=new FlowDocument(paragraph);
+            editor.Focus();
+            editor.CaretPosition=paragraph.ContentEnd;
+            Require((bool)startList.Invoke(note,null),"A typed list prefix starts a list: "+prefix);
+            var list=(System.Windows.Documents.List)editor.Document.Blocks.FirstBlock;
+            var first=(Paragraph)list.ListItems.FirstListItem.Blocks.FirstBlock;
+            var content=String.Concat(NoteDocument.Runs(first.Inlines).Select(run=>run.Text));
+            Require(content==""&&list.Padding.Left==24,"The marker is converted into an empty list item at the fixed step. Text: ["+content+"] Padding: "+list.Padding.Left);
+            Require(list.MarkerStyle==(prefix=="3."?TextMarkerStyle.Decimal:TextMarkerStyle.Disc),"The marker chooses the correct list type");
+            Require(prefix!="3."||list.StartIndex==3,"Numbering begins at the typed number");
+            changeIndent.Invoke(note,new object[]{true});
+            Require(list.ListItems.FirstListItem.Margin.Left==24,"A first list item can move down a level at the selected step");
+            var reopened=new FlowDocument();
+            NoteDocument.Restore(reopened,NoteDocument.Capture(editor.Document));
+            var restoredList=(System.Windows.Documents.List)reopened.Blocks.FirstBlock;
+            Require(restoredList.ListItems.FirstListItem.Margin.Left==24,"The first item keeps its custom indent when reopened");
+            changeIndent.Invoke(note,new object[]{false});
+            Require(list.ListItems.FirstListItem.Margin.Left==0,"The first item can return to its original level");
+            list=(System.Windows.Documents.List)editor.Document.Blocks.FirstBlock;
+            var next=new Paragraph(new Run("Пункт"));
+            list.ListItems.Add(new ListItem(next));
+            editor.CaretPosition=next.ContentStart;
+            changeIndent.Invoke(note,new object[]{true});
+            var parent=(System.Windows.Documents.List)((ListItem)next.Parent).Parent;
+            Require(parent!=list&&parent.Padding.Left==24,"Indenting a following item creates a nested list at the chosen step");
+            changeIndent.Invoke(note,new object[]{false});
+            Require(((ListItem)next.Parent).Parent is System.Windows.Documents.List,"Outdenting keeps the item in the list");
+        }
+        var single=new Paragraph(new Run("Абзац"));
+        editor.Document=new FlowDocument(single);
+        editor.CaretPosition=single.ContentStart;
+        changeIndent.Invoke(note,new object[]{true});
+        var restored=new FlowDocument();
+        NoteDocument.Restore(restored,NoteDocument.Capture(editor.Document));
+        Require(((Paragraph)restored.Blocks.FirstBlock).Margin.Left==24,"Paragraph indentation survives save and restore");
+        changeIndent.Invoke(note,new object[]{false});
+        Require(single.Margin.Left==0,"Indentation can be reduced");
+    }
+
     static void VerifyWorkspaceFeatures(NoteEditor note,string directory)
     {
         var document = new FlowDocument(new Paragraph(new Run("Альфа ")) { Inlines = { new Bold(new Run("бета")), new Run(" альфа") } });

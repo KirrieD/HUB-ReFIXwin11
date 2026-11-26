@@ -26,20 +26,22 @@ namespace ReFix.Tests
                     var p=controls.Current;
                     report("legacy behavior retains safe module defaults",!p.AutoHideHub&&p.AutoHideMixer&&p.AutoHideTaskMenu&&!p.StartTaskMenuWithHub&&p.StartMixerWithHub);
                     p.AutoHideMixer=false;p.AutoHideTaskMenu=false;p.StartTaskMenuWithHub=true;
+                    p.ShowQuickNoteDesktopTabs=false;p.SetModuleStartup("quick-note",true);p.SetModuleStartup("system-monitor",false);p.AdoptRunningModule("system-monitor");
                     controls.Save(p);var clone=p.Clone();clone.AutoHideMixer=true;
                     controls.ResetDefaults();
                     using(var reopened=new ControlsStore(root))report("behavior survives save clone and key reset",!reopened.Current.AutoHideMixer&&!reopened.Current.AutoHideTaskMenu&&reopened.Current.StartTaskMenuWithHub&&reopened.Current.StartMixerWithHub&&!reopened.Current.AutoHideHub);
+                    using(var reopened=new ControlsStore(root))report("note tabs and extension startup survive key reset and migration",!reopened.Current.ShowQuickNoteDesktopTabs&&reopened.Current.StartsWithHub("quick-note")&&!reopened.Current.StartsWithHub("system-monitor"));
                     report("task menu has distinct global and contextual shortcuts",controls.Current.Get("task-menu.toggle")=="Ctrl+Alt+M"&&controls.Current.Get("task-menu.hide")=="Esc");
                     bool startup=false,settingsOpened=false;
                     var window=new BehaviorWindow(themes,controls,delegate{return startup;},delegate(bool value){startup=value;},null,delegate{settingsOpened=true;return Task.FromResult(0);});
                     try
                     {
-                        window.Show();window.UpdateLayout();ExpandAll(window);window.UpdateLayout();report("behavior has four collapsible application sections",CountSections(window)==4);
+                        window.Show();window.UpdateLayout();ExpandAll(window);window.UpdateLayout();report("behavior has six collapsible application sections",CountSections(window)==6);
                         var sections=(Dictionary<string,Expander>)typeof(BehaviorWindow).GetField("sections",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(window);((StackPanel)sections["mini-icons"].Content).Children.OfType<Button>().Single(b=>Convert.ToString(b.Content)=="Открыть настройки").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));report("mini behavior settings button invokes dedicated settings action",settingsOpened);var check=Find(window,"Скрывать Микшер");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         report("behavior checkbox saves immediately",controls.Current.AutoHideMixer);
                         check=Find(window,"Автозапуск HUB");check.IsChecked=true;check.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         report("HUB startup uses isolated registration adapter",startup);
-                        report("behavior retains eight independent checkboxes",Count(window)==8);
+                        report("behavior exposes extension startup and desktop note visibility",Count(window)==11);
                         var partial=FindRadio(window,"Частично");partial.IsChecked=true;partial.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));report("menu layering choice saves immediately",controls.Current.TaskMenuLayer==TaskMenuLayer.ExceptFullscreen);
                         var hide=FindRadio(window,"Убрать грани");hide.IsChecked=true;hide.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));report("edge visibility is independent from menu layering",!controls.Current.ShowTaskMenuEdges&&controls.Current.TaskMenuLayer==TaskMenuLayer.ExceptFullscreen);
                         report("layer and edge choices are mutually exclusive",FindRadio(window,"Поверх всех окон (стандарт)").IsChecked==false&&FindRadio(window,"Ниже всех окон").IsChecked==false&&FindRadio(window,"Показать грани").IsChecked==false);
@@ -64,6 +66,15 @@ namespace ReFix.Tests
             Func<ModuleView,Task> start=delegate(ModuleView view){starts.Add(view.Manifest.Id);return Task.FromResult(0);};
             Program.ResumeEnabledModules(p,new[]{mixer,menu},start).GetAwaiter().GetResult();
             report("startup resumes mixer and menu independently",starts.Count==2&&starts[0]=="quiet-mixer"&&starts[1]=="task-menu");
+            starts.Clear();
+            var note=new ModuleView{Manifest=new ModuleManifest{Id="quick-note"},State="OFF"};
+            var monitor=new ModuleView{Manifest=new ModuleManifest{Id="system-monitor"},State="OFF"};
+            var custom=new ModuleView{Manifest=new ModuleManifest{Id="custom-extension"},State="OFF"};
+            p.SetModuleStartup("quick-note",true);
+            p.SetModuleStartup("system-monitor",true);
+            p.SetModuleStartup("custom-extension",true);
+            Program.ResumeEnabledModules(p.Clone(),new[]{note,monitor,custom},start).GetAwaiter().GetResult();
+            report("startup includes notes monitoring and custom extensions",starts.SequenceEqual(new[]{"quick-note","system-monitor","custom-extension"}));
             starts.Clear();p.StartMixerWithHub=false;Program.ResumeEnabledModules(p,new[]{mixer,menu},start).GetAwaiter().GetResult();
             report("menu startup does not require mixer startup",starts.Count==1&&starts[0]=="task-menu");
             starts.Clear();p.StartMixerWithHub=true;menu.State="NO";mixer.State="ON";Program.ResumeEnabledModules(p,new[]{mixer,menu},start).GetAwaiter().GetResult();

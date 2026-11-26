@@ -135,11 +135,12 @@ namespace ReFix.QuickNote
                     Command(menu, label, () => SetMarker(marker));
                 }
                 menu.Items.Add(new Separator());
-                Command(menu, "Увеличить уровень", () => EditingCommands.IncreaseIndentation.Execute(null, editor));
-                Command(menu, "Уменьшить уровень", () => EditingCommands.DecreaseIndentation.Execute(null, editor));
+                Command(menu, "Увеличить отступ", () => ChangeIndent(true));
+                Command(menu, "Уменьшить отступ", () => ChangeIndent(false));
                 menu.IsOpen = true;
             });
             tools.Children.Add(levels);
+            AddIndentTools();
             tools.Children.Add(Button("☺", delegate { editor.Focus(); EmojiPicker.Open(); }));
             tools.Children.Add(Button("¶", delegate { showSymbols = !showSymbols; highlights.ShowSymbols = showSymbols; highlights.InvalidateVisual(); }));
         }
@@ -154,7 +155,7 @@ namespace ReFix.QuickNote
                 item = editor.CaretPosition.Paragraph == null ? null : editor.CaretPosition.Paragraph.Parent as ListItem;
             }
             var list = item == null ? null : item.Parent as System.Windows.Documents.List;
-            if (list != null) { list.MarkerStyle = marker; bodyDirty = true; QueueSave(); }
+            if (list != null) { list.MarkerStyle = marker; ApplyListSpacing(editor.Document.Blocks); bodyDirty = true; QueueSave(); }
         }
 
         static MenuItem Section(ItemsControl parent, string text)

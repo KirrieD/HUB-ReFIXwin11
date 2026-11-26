@@ -61,6 +61,13 @@ public static class BackendTests {
     }
     test("integration idle ON refresh never publishes OFF",()=>{var events=new List<string>();System.ComponentModel.PropertyChangedEventHandler changed=(s,e)=>{if(e.PropertyName=="State"||e.PropertyName=="InstalledVersion")events.Add(e.PropertyName+":"+view.State+":"+view.InstalledVersion);};view.PropertyChanged+=changed;try{manager.RefreshStatesAsync().GetAwaiter().GetResult();manager.RefreshStatesAsync().GetAwaiter().GetResult();}finally{view.PropertyChanged-=changed;}if(view.State!="ON"||events.Count!=0)throw new Exception("Idle state flicker: "+string.Join(",",events));});
     test("integration show",()=>manager.ShowAsync(view).GetAwaiter().GetResult());
+    test("desktop shortcut command creates a saved note via the verified running module",()=>{
+     manager.NewNoteAsync(view).GetAwaiter().GetResult();
+     string index=Path.Combine(root,"notes","library.json");
+     if(!System.Threading.SpinWait.SpinUntil(()=>File.Exists(index),3000))throw new IOException("Note was not saved.");
+     var contents=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(File.ReadAllText(index));
+     if(((System.Collections.ICollection)contents["Notes"]).Count!=1)throw new Exception("The shortcut did not create exactly one note.");
+    });
     test("integration refuses update while running",()=>{ExpectReject(()=>manager.InstallAsync(view).GetAwaiter().GetResult());if(view.State!="ON")throw new Exception(view.Detail);});
     test("integration stop OFF",()=>{manager.StopAsync(view).GetAwaiter().GetResult();if(view.State!="OFF")throw new Exception(view.Detail);});
     test("integration stale process identity OFF",()=>{using(var process=Process.GetCurrentProcess()){File.WriteAllText(Path.Combine(root,"state","quick-note.json"),new JavaScriptSerializer().Serialize(new{id="quick-note",pid=process.Id,startedUtc="1",protocol=1}));}manager.RefreshStatesAsync().GetAwaiter().GetResult();if(view.State!="OFF")throw new Exception(view.Detail);});

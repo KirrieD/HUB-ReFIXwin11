@@ -31,7 +31,7 @@ namespace ReFix.Hub
     }
     internal static class Program
     {
-        internal const int Toggle=0x8101,Quit=0x8102;
+        internal const int Toggle=0x8101,Quit=0x8102,NewNote=0x8105;
         private static string Instance
         {
             get { using(SHA256 hash=SHA256.Create())return "ReFIXHub."+BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(WindowsIdentity.GetCurrent().User.Value+Paths.Root))).Replace("-","").Substring(0,20); }
@@ -59,7 +59,12 @@ namespace ReFix.Hub
                 bool created;
                 using(Mutex mutex=new Mutex(true,"Local\\"+Instance,out created))
                 {
-                    if(!created){if(!args.Contains("--background"))Native.PostMessage(Native.FindWindow(null,Instance),Toggle,IntPtr.Zero,IntPtr.Zero);return;}
+                    if(!created)
+                    {
+                        if(args.Contains("--new-note"))Native.PostMessage(Native.FindWindow(null,Instance),NewNote,IntPtr.Zero,IntPtr.Zero);
+                        else if(!args.Contains("--background"))Native.PostMessage(Native.FindWindow(null,Instance),Toggle,IntPtr.Zero,IntPtr.Zero);
+                        return;
+                    }
                     Run(args,startupWarning);
                 }
             }
@@ -91,12 +96,26 @@ namespace ReFix.Hub
                     catch(Exception ex){Log(ex);Forms.MessageBox.Show("Не удалось открыть интерфейс HUB.\n\n"+ex.Message+"\n\nЗапустите HUB повторно.","HUB ReFIX",Forms.MessageBoxButtons.OK,Forms.MessageBoxIcon.Error);Forms.Application.ExitThread();}
                 };
                 Action toggle=delegate{if(session==null)show();else session.Toggle();};
+                Action newNote=async delegate
+                {
+                    try
+                    {
+                        var note=modules.Modules.FirstOrDefault(m=>m.Manifest.Id=="quick-note");
+                        if(note==null||String.IsNullOrEmpty(note.InstalledVersion))throw new InvalidOperationException("Установите расширение «Быстрая заметка» в HUB.");
+                        if(new Version(note.InstalledVersion)<new Version("1.6.3"))throw new InvalidOperationException("Обновите расширение «Быстрая заметка» до версии 1.6.3 или новее.");
+                        await modules.RefreshStatesAsync();
+                        if(note.State!="ON")await modules.StartAsync(note);
+                        await modules.NewNoteAsync(note);
+                    }
+                    catch(Exception ex){Log(ex);Forms.MessageBox.Show(ex.Message,"Новая заметка",Forms.MessageBoxButtons.OK,Forms.MessageBoxIcon.Warning);}
+                };
                 uint recreated=Native.RegisterWindowMessage("TaskbarCreated");
                 Action refreshTray=delegate{HotkeyRuntimeStatus state=controls.GetRuntime("hub.toggle");string key=state==null?controls.Current.Get("hub.toggle"):state.Actual;tray.Text="HUB ReFIX · "+(string.IsNullOrEmpty(key)?"трей":key)+(state!=null&&!string.IsNullOrEmpty(state.Error)?" · конфликт":"");};
                 listener.Message+=delegate(int message,IntPtr wParam)
                 {
                     if(hubKey!=null&&hubKey.ProcessMessage(message,wParam))return;
                     if(message==Toggle)toggle();
+                    else if(message==NewNote)newNote();
                     else if(message==Quit)Forms.Application.ExitThread();
                     else if(message==0x8103){refreshTray();string failure=Interlocked.Exchange(ref backgroundNotice,null);if(failure!=null)report(failure);}
                     else if(message==UpdateCoordinator.Message&&updater!=null)updater.ProcessMessage();
@@ -126,9 +145,9 @@ namespace ReFix.Hub
                 try
                 {
                     if(render){if(session==null)session=OpenSession(themes,modules,controls,checkUpdates);session.SetNotice(notice);session.Render(args[1]);return;}
-                    if(!args.Contains("--background"))
+                    if(args.Contains("--new-note")||!args.Contains("--background"))
                     {
-                        firstShow=delegate{Forms.Application.Idle-=firstShow;show();};Forms.Application.Idle+=firstShow;
+                        firstShow=delegate{Forms.Application.Idle-=firstShow;if(args.Contains("--new-note"))newNote();else show();};Forms.Application.Idle+=firstShow;
                     }
                     Task startup=Task.Run(delegate{return ResumeModules(modules,controls);});startup.ContinueWith(delegate(Task failed){Log(failed.Exception);Interlocked.Exchange(ref backgroundNotice,"Не удалось запустить расширения: "+failed.Exception.GetBaseException().Message);Native.PostMessage(listener.Handle,0x8103,IntPtr.Zero,IntPtr.Zero);},TaskContinuationOptions.OnlyOnFaulted);
                     updater.Check(false);
@@ -149,21 +168,26 @@ namespace ReFix.Hub
             var errors=new System.Collections.Generic.List<Exception>();
             try{await new LegacyMixerMigration(manager,Paths.Root).RunAsync();}catch(Exception ex){errors.Add(ex);}
             var profile=controls.Current;
-            if(profile.StartMixerWithHub||profile.StartTaskMenuWithHub||profile.StartMiniIconsWithHub)
+            if(!profile.ModuleStartupMigrated)
+            {
+                profile=controls.Current;
+                foreach(var module in manager.Modules.Where(m=>m.State=="ON"))profile.AdoptRunningModule(module.Manifest.Id);
+                profile.ModuleStartupMigrated=true;
+                controls.Save(profile);
+            }
+            if(profile.HasModuleStartup)
             {
                 await manager.RefreshStatesAsync();
-                try{await ResumeEnabledModules(profile,manager.Modules,manager.StartAsync);}catch(AggregateException ex){errors.AddRange(ex.InnerExceptions);}
+                try{await ResumeEnabledModules(profile,manager.Modules,manager.StartAtHubStartupAsync);}catch(AggregateException ex){errors.AddRange(ex.InnerExceptions);}
             }
             if(errors.Count!=0)throw new AggregateException(errors);
         }
         internal static async Task ResumeEnabledModules(ControlsProfile profile,System.Collections.Generic.IEnumerable<ModuleView> modules,Func<ModuleView,Task> start)
         {
             var errors=new System.Collections.Generic.List<Exception>();
-            foreach(string id in new[]{"mini-icons","quiet-mixer","task-menu"})
+            foreach(var module in modules.OrderByDescending(view=>view.Manifest.Id=="mini-icons"))
             {
-                if(id=="quiet-mixer"?!profile.StartMixerWithHub:id=="task-menu"?!profile.StartTaskMenuWithHub:!profile.StartMiniIconsWithHub)continue;
-                ModuleView module=modules.FirstOrDefault(delegate(ModuleView view){return view.Manifest.Id==id;});
-                if(module==null||module.State!="OFF")continue;
+                if(module.State!="OFF"||!profile.StartsWithHub(module.Manifest.Id))continue;
                 try{await start(module);}catch(Exception ex){errors.Add(ex);}
             }
             if(errors.Count!=0)throw new AggregateException(errors);
