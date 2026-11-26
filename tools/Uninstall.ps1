@@ -31,6 +31,8 @@ if ($running.Count) {
     if (!$request.WaitForExit(5000)) { throw 'Exit request timed out. Close HUB from its tray menu.' }
     foreach ($process in $running) { if (!$process.WaitForExit(10000)) { throw 'HUB did not exit. Close it from its tray menu and retry.' } }
 }
+$noteMenuCleanup = Start-Process -FilePath (Join-Path $target 'HUB-ReFIX.Core.exe') -ArgumentList '--remove-note-shell-menu' -WindowStyle Hidden -Wait -PassThru
+if ($noteMenuCleanup.ExitCode -ne 0) { Write-Warning 'Could not remove the Quick Note entry from the New menu.' }
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 if (Test-Path -LiteralPath $runKey) {
     $value = (Get-Item -LiteralPath $runKey).GetValue('ReFIXHub')

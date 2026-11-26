@@ -15,6 +15,7 @@ namespace ReFix.Tests
         internal static void Run(Action<string,bool> report)
         {
             ResumeTests(report);
+            ShellMenuTests(report);
             string root=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"behavior-test-"+Guid.NewGuid().ToString("N"));
             try
             {
@@ -57,6 +58,41 @@ namespace ReFix.Tests
             }
             finally{if(Directory.Exists(root))Directory.Delete(root,true);}
         }
+        static void ShellMenuTests(Action<string,bool> report)
+        {
+            string path=@"Software\ReFIXHub-Tests-"+Guid.NewGuid().ToString("N");
+            string launcher=@"C:\Portable HUB\HUB-ReFIX.exe";
+            string moved=@"D:\Moved HUB\HUB-ReFIX.exe";
+            var note=new ModuleView{InstalledVersion="1.6.2"};
+            report("Explorer New menu waits for a compatible installed notes module",!NoteShellMenu.Supported(null)&&!NoteShellMenu.Supported(note));
+            note.InstalledVersion="1.6.4";
+            report("Explorer New menu works with stopped notes",NoteShellMenu.Supported(note)&&note.State=="NO");
+            try
+            {
+                using(var classes=Microsoft.Win32.Registry.CurrentUser.CreateSubKey(path))
+                {
+                    report("Explorer registration is created once",NoteShellMenu.Sync(classes,launcher,true)&&!NoteShellMenu.Sync(classes,launcher,true));
+                    using(var shellNew=classes.OpenSubKey(NoteShellMenu.Extension+@"\ShellNew"))
+                        report("Explorer New runs the quoted launcher without creating a blank file",
+                            (string)shellNew.GetValue("Command")=="\""+launcher+"\" --new-note"&&shellNew.GetValue("NullFile")==null);
+                    report("relocating HUB updates the owned shell association",NoteShellMenu.Sync(classes,moved,true)&&!NoteShellMenu.Sync(classes,launcher,false));
+                    using(var unrelated=classes.CreateSubKey(".unrelated"))unrelated.SetValue("","Unrelated.Editor");
+                    bool removed=NoteShellMenu.Sync(classes,moved,false);
+                    using(var extension=classes.OpenSubKey(NoteShellMenu.Extension))
+                    using(var progId=classes.OpenSubKey(NoteShellMenu.ProgId))
+                    using(var unrelated=classes.OpenSubKey(".unrelated"))
+                        report("removal clears owned registration and preserves other file types",removed&&
+                            extension==null&&progId==null&&unrelated!=null&&(string)unrelated.GetValue("")=="Unrelated.Editor");
+                    using(var foreign=classes.CreateSubKey(NoteShellMenu.Extension))foreign.SetValue("","Foreign.Editor");
+                    bool conflict=false;
+                    try { NoteShellMenu.Sync(classes,launcher,true); } catch(InvalidOperationException) { conflict=true; }
+                    using(var foreign=classes.OpenSubKey(NoteShellMenu.Extension))
+                        report("HUB preserves a foreign registration for the same extension",conflict&&(string)foreign.GetValue("")=="Foreign.Editor");
+                }
+            }
+            finally { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(path,false); }
+        }
+
         static void ResumeTests(Action<string,bool> report)
         {
             var p=new ControlsProfile{StartMixerWithHub=true,StartTaskMenuWithHub=true};

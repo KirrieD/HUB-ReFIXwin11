@@ -31,7 +31,7 @@ namespace ReFix.Hub
     }
     internal static class Program
     {
-        internal const int Toggle=0x8101,Quit=0x8102,NewNote=0x8105;
+        internal const int Toggle=0x8101,Quit=0x8102,NewNote=0x8105,NoteMenuChanged=0x8106;
         private static string Instance
         {
             get { using(SHA256 hash=SHA256.Create())return "ReFIXHub."+BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(WindowsIdentity.GetCurrent().User.Value+Paths.Root))).Replace("-","").Substring(0,20); }
@@ -49,6 +49,11 @@ namespace ReFix.Hub
                 {
                     string candidate=Path.GetFullPath(args[launcherIndex+1]);
                     if(File.Exists(candidate)&&String.Equals(Path.GetDirectoryName(candidate).TrimEnd(Path.DirectorySeparatorChar),AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar),StringComparison.OrdinalIgnoreCase))Startup.Launcher=candidate;
+                }
+                if(args.Contains("--remove-note-shell-menu"))
+                {
+                    NoteShellMenu.Sync(Startup.Launcher,false);
+                    return;
                 }
                 string startupWarning=null;
                 if(!args.Contains("--render") && String.IsNullOrEmpty(Environment.GetEnvironmentVariable("REFIX_DATA_ROOT")))
@@ -111,11 +116,24 @@ namespace ReFix.Hub
                 };
                 uint recreated=Native.RegisterWindowMessage("TaskbarCreated");
                 Action refreshTray=delegate{HotkeyRuntimeStatus state=controls.GetRuntime("hub.toggle");string key=state==null?controls.Current.Get("hub.toggle"):state.Actual;tray.Text="HUB ReFIX · "+(string.IsNullOrEmpty(key)?"трей":key)+(state!=null&&!string.IsNullOrEmpty(state.Error)?" · конфликт":"");};
+                int menuState=-1;
+                Action syncNoteMenu=delegate
+                {
+                    try { NoteShellMenu.Sync(Startup.Launcher,Volatile.Read(ref menuState)==1); }
+                    catch(Exception ex) { Log(ex);report("Не удалось настроить меню «Создать»: "+ex.Message); }
+                };
+                EventHandler noteInstallationChanged=delegate
+                {
+                    int state=NoteShellMenu.Supported(modules.Modules.FirstOrDefault(m=>m.Manifest.Id=="quick-note"))?1:0;
+                    if(Interlocked.Exchange(ref menuState,state)!=state)
+                        Native.PostMessage(listener.Handle,NoteMenuChanged,IntPtr.Zero,IntPtr.Zero);
+                };
                 listener.Message+=delegate(int message,IntPtr wParam)
                 {
                     if(hubKey!=null&&hubKey.ProcessMessage(message,wParam))return;
                     if(message==Toggle)toggle();
                     else if(message==NewNote)newNote();
+                    else if(message==NoteMenuChanged)syncNoteMenu();
                     else if(message==Quit)Forms.Application.ExitThread();
                     else if(message==0x8103){refreshTray();string failure=Interlocked.Exchange(ref backgroundNotice,null);if(failure!=null)report(failure);}
                     else if(message==UpdateCoordinator.Message&&updater!=null)updater.ProcessMessage();
@@ -145,6 +163,11 @@ namespace ReFix.Hub
                 try
                 {
                     if(render){if(session==null)session=OpenSession(themes,modules,controls,checkUpdates);session.SetNotice(notice);session.Render(args[1]);return;}
+                    if(String.IsNullOrEmpty(Environment.GetEnvironmentVariable("REFIX_DATA_ROOT")))
+                    {
+                        modules.Changed+=noteInstallationChanged;
+                        noteInstallationChanged(modules,EventArgs.Empty);
+                    }
                     if(args.Contains("--new-note")||!args.Contains("--background"))
                     {
                         firstShow=delegate{Forms.Application.Idle-=firstShow;if(args.Contains("--new-note"))newNote();else show();};Forms.Application.Idle+=firstShow;
@@ -155,6 +178,7 @@ namespace ReFix.Hub
                 }
                 finally
                 {
+                    modules.Changed-=noteInstallationChanged;
                     if(firstShow!=null)Forms.Application.Idle-=firstShow;
                     if(miniTray!=null)miniTray.Dispose();updater.Dispose();controls.Changed-=bindingsChanged;controls.RuntimeChanged-=bindingsChanged;hubKey.Dispose();tray.Visible=false;if(foreground!=IntPtr.Zero)Native.UnhookWinEvent(foreground);
                     if(session!=null)session.Close();GC.KeepAlive(observer);

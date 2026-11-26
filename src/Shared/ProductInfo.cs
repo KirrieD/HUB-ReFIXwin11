@@ -2,6 +2,6 @@ namespace ReFix.Shared
 {
     public static class ProductInfo
     {
-        public const string Version = "1.5.2";
+        public const string Version = "1.5.3";
     }
 }
