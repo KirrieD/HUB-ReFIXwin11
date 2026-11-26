@@ -111,11 +111,17 @@ namespace ReFix.QuickNote
             });
         }
 
-        internal void NewList(ListWindow owner)
+        internal void NewList(Window owner)
         {
             string name = Prompt(owner, "Новый список", "");
             if (name == null) return;
-            Run(delegate { ShowList(library.AddList(name)); RefreshLists(); });
+            Run(delegate
+            {
+                var list = library.AddList(name);
+                if (controls.Current.ShowQuickNoteDesktopTabs) ShowList(list);
+                else OpenList(list);
+                RefreshLists();
+            });
         }
 
         internal void RenameList(ListWindow owner, NoteList list)
@@ -194,7 +200,7 @@ namespace ReFix.QuickNote
             var field = new System.Windows.Controls.TextBox { Text = value, MaxLength = 80, Margin = new Thickness(0, 0, 0, 8) };
             var panel = new System.Windows.Controls.StackPanel { Margin = new Thickness(16) };
             panel.Children.Add(field);
-            var dialog = new Window { Owner = owner, Title = title, Width = 330, SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false };
+            var dialog = new Window { Owner = owner, Title = title, Width = 330, SizeToContent = SizeToContent.Height, WindowStartupLocation = owner == null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false };
             ThemeControls.Install(dialog);
             field.SetResourceReference(Control.BackgroundProperty,"Hub.Surface");
             field.SetResourceReference(Control.ForegroundProperty,"Hub.Foreground");

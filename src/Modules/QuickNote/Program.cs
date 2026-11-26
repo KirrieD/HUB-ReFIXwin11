@@ -36,6 +36,16 @@ namespace ReFix.QuickNote
                     Action stop = delegate { if (controller.SaveAll()) app.Shutdown(); };
                     source.AddHook(delegate(IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled) { handled = keys.ProcessMessage(msg, w); return IntPtr.Zero; });
                     menu.Items.Add("Открыть заметки", null, delegate { controller.Show(); });
+                    var lists = new System.Windows.Forms.ToolStripMenuItem("Списки заметок");
+                    menu.Opening += delegate
+                    {
+                        while (lists.DropDownItems.Count > 0) lists.DropDownItems[0].Dispose();
+                        foreach (var list in library.Index.Lists)
+                            lists.DropDownItems.Add(list.Name, null, delegate { controller.OpenList(list); });
+                        lists.DropDownItems.Add(new System.Windows.Forms.ToolStripSeparator());
+                        lists.DropDownItems.Add("Создать список…", null, delegate { controller.NewList(null); });
+                    };
+                    menu.Items.Add(lists);
                     Action newNote = delegate { controller.NewNote(library.Index.Lists[0]); };
                     menu.Items.Add("Новая заметка", null, delegate { newNote(); });
                     menu.Items.Add("Выйти", null, delegate { stop(); });
