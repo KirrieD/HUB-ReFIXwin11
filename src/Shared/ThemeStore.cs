@@ -15,11 +15,36 @@ namespace ReFix.Shared
         ThemeProfile current,pending; ScopeSettings scoped; bool disposed,writeScheduled,systemSubscribed; int writeRetries,readRetries; string lastError; readonly Timer saveTimer,readTimer;
         public event EventHandler Changed;
         public string Root {get{return root;}} public string Scope {get{return scope;}}
-        public ThemeProfile Current {get{lock(gate)return (scope!=null&&current.Mode=="Custom"&&scoped.Enabled&&scoped.Profile!=null?scoped.Profile:current).Clone();}}
+        public ThemeProfile Current {get{lock(gate)return WithGlobalIcons(scope!=null&&current.Mode=="Custom"&&scoped.Enabled&&scoped.Profile!=null?scoped.Profile:current);}}
         public ThemeProfile GlobalCurrent {get{lock(gate)return current.Clone();}}
-        public ThemeProfile ScopedCurrent {get{lock(gate)return (scoped.Profile??current).Clone();}}
+        public ThemeProfile ScopedCurrent {get{lock(gate)return WithGlobalIcons(scoped.Profile??current);}}
         public bool ScopeOverrideEnabled {get{lock(gate)return scope!=null&&scoped.Enabled;}}
         public string LastError {get{lock(gate)return lastError;}}
+        ThemeProfile WithGlobalIcons(ThemeProfile profile)
+        {
+            var copy=profile.Clone();
+            if(profile!=current)copy.WindowsIcons=current.CopyWindowsIcons();
+            return copy;
+        }
+        public void SetWindowsIcon(string id,int? icon)
+        {
+            if(!MiniTrayFiles.ValidId(id)||id!=id.ToLowerInvariant())throw new ArgumentException("Недопустимый ID расширения.","id");
+            if(icon.HasValue&&!WindowsStockIcons.IsKnown(icon.Value))throw new ArgumentOutOfRangeException("icon");
+            lock(gate)
+            {
+                if(disposed)throw new ObjectDisposedException("ThemeStore");
+                if(scope!=null)throw new InvalidOperationException("Выбор значков сохраняется в общих настройках HUB.");
+                if(current.WindowsIconFor(id)==icon)return;
+                if(icon.HasValue)
+                {
+                    if(current.WindowsIcons.Count>=256&&!current.WindowsIcons.ContainsKey(id))throw new InvalidOperationException("Можно сохранить до 256 назначений значков.");
+                    current.WindowsIcons[id]=icon.Value;
+                }
+                else current.WindowsIcons.Remove(id);
+                QueueSave(current);
+            }
+            Raise();
+        }
         public ThemeStore(string root):this(root,null){}
         public ThemeStore(string root,string scope) {
             if(String.IsNullOrWhiteSpace(root))throw new ArgumentException("A data root is required","root");

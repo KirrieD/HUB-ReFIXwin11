@@ -25,6 +25,14 @@ namespace ReFix.Tests
                         check("Published client carries its current icon theme",entry.IconTheme!=null&&entry.IconTheme.IconFamily==theme.Current.IconFamily);
                         ThemeProfile custom=theme.Current;custom.Mode="Custom";custom.IconFamily="Outline";custom.Accent="#123456";theme.Save(custom);Pump();
                         check("Theme change republishes scoped icon palette",MiniTrayFiles.ReadEntries(root)[0].IconTheme.IconFamily=="Outline"&&MiniTrayFiles.ReadEntries(root)[0].IconTheme.Accent=="#123456");
+                        theme.SetWindowsIcon("future-extension",16);
+                        theme.SetWindowsIcon("hub",3);
+                        Pump();
+                        var iconTheme=MiniTrayFiles.ReadEntries(root)[0].IconTheme;
+                        check("Tray clients apply and publish only their own Windows icon",iconTheme.WindowsIconFor("hub")==3&&iconTheme.WindowsIcons.Count==1);
+                        theme.SetWindowsIcon("hub",null);
+                        Pump();
+                        check("Resetting the icon is propagated to the tray",!MiniTrayFiles.ReadEntries(root)[0].IconTheme.WindowsIconFor("hub").HasValue);
                         check("Client starts with Windows tray fallback",tray.Visible);
                         var transfer=(ToolStripMenuItem)tray.ContextMenuStrip.Items[tray.ContextMenuStrip.Items.Count-1];
                         check("Transfer menu is disabled without valid host",!transfer.Enabled);

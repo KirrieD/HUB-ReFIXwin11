@@ -23,8 +23,14 @@ namespace ReFix.Shared
         public static Bitmap CreateBitmap(string id,int size,ThemeProfile profile)
         {
             size=Math.Max(16,Math.Min(256,size));
-            ThemeProfile p=(profile??new ThemeProfile()).Clone();p.Normalize();
             string key=(id??"").Trim().ToLowerInvariant();
+            int? windowsIcon=profile==null?null:profile.WindowsIconFor(key);
+            if(windowsIcon.HasValue)
+            {
+                var stockIcon=WindowsStockIcons.CreateBitmap(windowsIcon.Value,size);
+                if(stockIcon!=null)return stockIcon;
+            }
+            ThemeProfile p=(profile??new ThemeProfile()).Clone();p.Normalize();
             bool custom=p.Mode=="Custom"&&p.IconFollowTheme;
             Color accent=custom?Parse(p.Accent):Stock(key);
             Color foreground=custom?Parse(p.Foreground):Color.FromArgb(242,243,245);

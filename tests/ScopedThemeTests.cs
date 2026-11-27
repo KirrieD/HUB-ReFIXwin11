@@ -32,6 +32,16 @@ internal static class ScopedThemeTests
                 Check(mixer.Current.Accent=="#123456","Disabled scope must inherit");
                 mixer.SetScopeOverrideEnabled(true);
                 Check(mixer.Current.Accent=="#ABCDEF","Re-enabled scope must restore values");
+                hub.SetWindowsIcon("quiet-mixer", 71);
+                Until(delegate{return mixer.Current.WindowsIconFor("quiet-mixer")==71;});
+                Check(mixer.Current.Accent=="#ABCDEF"&&!menu.Current.WindowsIconFor("task-menu").HasValue,"Global icons and scoped colours must coexist independently");
+                using(var reopened=new ThemeStore(root))
+                {
+                    Until(delegate{return reopened.Current.WindowsIconFor("quiet-mixer")==71;});
+                }
+                hub.SetWindowsIcon("quiet-mixer",null);
+                Until(delegate{return !mixer.Current.WindowsIconFor("quiet-mixer").HasValue;});
+                report("Windows icon choices persist, apply through scoped themes and reset live",true);
                 report("scoped themes inherit, isolate and preserve custom values in System",true);
             }
             using(var reader=new ThemeStore(root,"quiet-mixer")) {

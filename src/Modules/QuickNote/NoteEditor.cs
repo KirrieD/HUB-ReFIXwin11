@@ -27,6 +27,7 @@ namespace ReFix.QuickNote
         readonly DockPanel root;
         readonly Grid page;
         readonly WrapPanel tools;
+        TextRange formattingSelection;
         bool bodyDirty, metadataDirty, disposed, saveFailed;
 
         internal NoteEditor(Library library, NoteRecord note, ControlsStore controls,
@@ -53,7 +54,7 @@ namespace ReFix.QuickNote
             for (int i = 1; i <= 3; i++) styles.Items.Add("Заголовок " + i);
             for (int i = 1; i <= 3; i++) styles.Items.Add("Подзаголовок " + i);
             styles.SelectedIndex = 0;
-            styles.SelectionChanged += delegate { if (styles.SelectedIndex > 0) { ApplyStyle(styles.SelectedIndex - 1); styles.SelectedIndex = 0; } };
+            styles.SelectionChanged += delegate { if (styles.SelectedIndex > 0) { int style=styles.SelectedIndex-1; ApplyFormatting(()=>ApplyStyle(style)); styles.SelectedIndex=0; } };
             styles.IsEditable = false;
             tools.Children.Add(styles);
             tools.Children.Add(FormatButton("B", "Жирный", () => EditingCommands.ToggleBold.Execute(null, editor), FontWeights.Bold, FontStyles.Normal, null));
@@ -77,6 +78,13 @@ namespace ReFix.QuickNote
             bottomHint = Hint(root, "Нижняя подсказка", note.BottomHint, Dock.Bottom);
 
             editor.AcceptsTab = true;
+            editor.IsInactiveSelectionHighlightEnabled = true;
+            editor.PreviewLostKeyboardFocus += delegate { RememberFormattingSelection(); };
+            editor.SelectionChanged += delegate
+            {
+                editor.ClearValue(System.Windows.Controls.Primitives.TextBoxBase.SelectionTextBrushProperty);
+                if(editor.IsKeyboardFocusWithin)RememberFormattingSelection();
+            };
             editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             editor.Padding = new Thickness(12);
             editor.Background = Brushes.Transparent;
@@ -126,12 +134,46 @@ namespace ReFix.QuickNote
 
         Button FormatButton(string label, string description, Action apply, FontWeight weight, FontStyle style, TextDecorationCollection decorations)
         {
-            var button = Button("", delegate { editor.Focus(); apply(); });
+            var button = Button("", () => ApplyFormatting(apply));
             button.Content = new TextBlock { Text = label, FontSize = 15, FontWeight = weight, FontStyle = style, TextDecorations = decorations };
             button.ToolTip = description;
             button.Focusable = false;
             System.Windows.Automation.AutomationProperties.SetName(button, description);
             return button;
+        }
+
+        void RememberFormattingSelection()
+        {
+            formattingSelection=new TextRange(editor.Selection.Start,editor.Selection.End);
+        }
+
+        TextRange FormattingRange()
+        {
+            if(editor.IsKeyboardFocusWithin||formattingSelection==null||!formattingSelection.Start.IsInSameDocument(editor.Document.ContentStart))
+                RememberFormattingSelection();
+            return formattingSelection;
+        }
+
+        void ApplyFormatting(Action action) { ApplyFormatting(FormattingRange(),action); }
+
+        void ApplyFormatting(TextRange range,Action action)
+        {
+            bool wasSelected=!range.IsEmpty;
+            FocusEditorAt(range);
+            editor.BeginChange();
+            try { action(); }
+            finally { editor.EndChange(); }
+            if(wasSelected&&editor.Selection.IsEmpty&&!range.IsEmpty)editor.Selection.Select(range.Start,range.End);
+            RememberFormattingSelection();
+            bodyDirty=true;
+            QueueSave();
+        }
+
+        void FocusEditorAt(TextRange range)
+        {
+            editor.Focus();
+            if(editor.Selection.Start.CompareTo(range.Start)!=0||editor.Selection.End.CompareTo(range.End)!=0)
+                editor.Selection.Select(range.Start,range.End);
         }
 
         void ToggleDecoration(TextDecorationLocation location, TextDecoration decoration)
@@ -201,14 +243,11 @@ namespace ReFix.QuickNote
                 paragraph.FontWeight = style == 0 ? FontWeights.Normal : FontWeights.SemiBold;
                 if (paragraph == last) break;
             }
-            editor.Focus();
-            bodyDirty = true;
-            QueueSave();
         }
 
         void Palette(Button button, DependencyProperty property)
         {
-            var range = new TextRange(editor.Selection.Start, editor.Selection.End);
+            var range = FormattingRange();
             Palette(button, color => ApplyColor(range, property, color));
         }
 
@@ -307,16 +346,12 @@ namespace ReFix.QuickNote
 
         void ApplyColor(TextRange range, DependencyProperty property, string hex)
         {
-            editor.Focus();
             Brush brush;
             if (hex == null) brush = property == TextElement.ForegroundProperty ? editor.Foreground : Brushes.Transparent;
             else brush = property == TextElement.BackgroundProperty ? NoteDocument.Highlight((Color)ColorConverter.ConvertFromString(hex)) : BrushFor(hex);
-            if (range.IsEmpty) editor.Selection.Select(range.Start, range.End);
-            if (range.IsEmpty) editor.Selection.ApplyPropertyValue(property, brush);
-            else range.ApplyPropertyValue(property, brush);
+            ApplyFormatting(range,()=>editor.Selection.ApplyPropertyValue(property,brush));
             if (property == TextElement.BackgroundProperty) highlights.RefreshColors();
-            bodyDirty = true;
-            QueueSave();
+            else if(!editor.Selection.IsEmpty)editor.SelectionTextBrush=brush;
         }
 
         void SelectImages()

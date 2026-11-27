@@ -72,7 +72,7 @@ namespace ReFix.Shared
         void OnTheme(object sender,EventArgs e){Queue(UpdateIcon);}
         void UpdateIcon()
         {
-            Icon next=null;try{ThemeProfile profile=theme==null?new ThemeProfile():theme.Current.Clone();profile.Normalize();next=ReFixIcons.CreateIcon(id,32,profile);tray.Icon=next;Icon old=generated;generated=next;next=null;if(old!=null)old.Dispose();entry.IconTheme=profile;MiniTrayFiles.WriteEntry(root,entry);}catch{if(next!=null)next.Dispose();}
+            Icon next=null;try{ThemeProfile profile=theme==null?new ThemeProfile():theme.Current;int? icon=profile.WindowsIconFor(id);profile.WindowsIcons.Clear();if(icon.HasValue)profile.WindowsIcons[id]=icon.Value;next=ReFixIcons.CreateIcon(id,32,profile);tray.Icon=next;Icon old=generated;generated=next;next=null;if(old!=null)old.Dispose();entry.IconTheme=profile;MiniTrayFiles.WriteEntry(root,entry);}catch{if(next!=null)next.Dispose();}
         }
         void DetachHost(){if(hostProcess!=null){hostProcess.Exited-=OnHostExit;hostProcess.Dispose();hostProcess=null;}hostIdentity=null;}
         void RefreshHost()

@@ -13,7 +13,7 @@ namespace ReFix.Hub
         internal SettingsWindow(ThemeStore themes,bool appearance=false)
         {
             this.themes=themes;Title="HUB ReFIX — настройки";
-            Width=Math.Min(640,SystemParameters.WorkArea.Width);Height=Math.Min(appearance?420:590,SystemParameters.WorkArea.Height);MinWidth=420;
+            Width=Math.Min(640,SystemParameters.WorkArea.Width);Height=Math.Min(appearance?500:590,SystemParameters.WorkArea.Height);MinWidth=420;
             ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;WindowStartupLocation=WindowStartupLocation.CenterOwner;
             WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;
             Ui.Styles(this);frame=new Border{Margin=new Thickness(16),BorderThickness=new Thickness(1)};Content=frame;
@@ -28,6 +28,7 @@ namespace ReFix.Hub
             {
                 Add(sections,"\uE790","Общее оформление","Тема, цвета и стиль HUB и расширений","styles");
                 Add(sections,"\uE767","Вид микшера","Размер окна, текста и ползунков","mixer-layout");
+                Add(sections,"\uE91B","Значки Windows","Значок для HUB или отдельного расширения","windows-icons");
             }
             else
             {

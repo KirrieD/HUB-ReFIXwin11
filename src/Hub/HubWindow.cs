@@ -28,6 +28,8 @@ namespace ReFix.Hub
         private readonly Border image;
         private readonly List<ModuleCard> views=new List<ModuleCard>();
         private StyleWindow editor;
+        private IconPickerWindow iconPicker;
+        private readonly HubIcon brandIcon=new HubIcon(22) { Margin=new Thickness(0,0,10,0) };
         private ControlsWindow controlsEditor;
         private BehaviorWindow behaviorEditor;
         private LinksWindow linksEditor;private MixerLayoutWindow mixerEditor;
@@ -97,7 +99,7 @@ namespace ReFix.Hub
             Grid title=new Grid { Margin=new Thickness(20,0,12,0),Background=System.Windows.Media.Brushes.Transparent };
             title.ColumnDefinitions.Add(new ColumnDefinition()); title.ColumnDefinitions.Add(new ColumnDefinition { Width=GridLength.Auto });
             StackPanel brand=new StackPanel { Orientation=Orientation.Horizontal,VerticalAlignment=VerticalAlignment.Center };
-            TextBlock mark=Ui.Text("◈",23,"Hub.Accent"); mark.Margin=new Thickness(0,0,10,0); brand.Children.Add(mark);
+            brand.Children.Add(brandIcon);
             brand.Children.Add(Ui.Text("HUB ReFIX",17,"Hub.Foreground")); title.Children.Add(brand);
             title.MouseLeftButtonDown+=delegate(object sender,MouseButtonEventArgs e) { if(e.ClickCount==1) try { DragMove(); } catch(InvalidOperationException) { } };
             Button close=Ui.Button("✕",HideHub,false); close.BorderThickness=new Thickness(0); close.Width=34; close.Height=30; close.Padding=new Thickness(0); close.ToolTip="Скрыть в трей"; Grid.SetColumn(close,1); title.Children.Add(close); return title;
@@ -202,10 +204,10 @@ namespace ReFix.Hub
         }
         internal void SetNotice(string text) { if(!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(delegate { SetNotice(text); })); return; } notice.Text=text; notice.ToolTip=text; }
         private void ThemeChanged(object sender,EventArgs e) { if(!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(delegate{ApplyTheme();if(!string.IsNullOrEmpty(themes.LastError))SetNotice("Не удалось сохранить оформление: "+themes.LastError);})); }
-        private void ApplyTheme() { Ui.Apply(this,themes.Current,frame,image);foreach(ModuleCard card in views)card.ApplyPreview(themes.Current); }
+        private void ApplyTheme() { var profile=themes.Current;Ui.Apply(this,profile,frame,image);brandIcon.Update("hub",profile);foreach(ModuleCard card in views)card.ApplyPreview(profile); }
         internal void OpenSettings()
         {
-            if(editor!=null)editor.Hide();if(controlsEditor!=null)controlsEditor.Hide();if(behaviorEditor!=null)behaviorEditor.Hide();if(linksEditor!=null)linksEditor.Hide();if(mixerEditor!=null)mixerEditor.Hide();
+            if(iconPicker!=null)iconPicker.Hide();if(editor!=null)editor.Hide();if(controlsEditor!=null)controlsEditor.Hide();if(behaviorEditor!=null)behaviorEditor.Hide();if(linksEditor!=null)linksEditor.Hide();if(mixerEditor!=null)mixerEditor.Hide();
             var selector=new SettingsWindow(themes){Owner=this};SettingsPlacement.Place(this,selector);
             if(selector.ShowDialog()!=true)return;
             if(selector.Selection=="controls")OpenControls();else if(selector.Selection=="appearance")OpenAppearance();else if(selector.Selection=="behavior")OpenBehavior();else if(selector.Selection=="links")OpenLinks();
@@ -220,7 +222,18 @@ namespace ReFix.Hub
         {
             var selector=new SettingsWindow(themes,true){Owner=this};SettingsPlacement.Place(this,selector);
             if(selector.ShowDialog()!=true)return;
-            if(selector.Selection=="styles")OpenStyles();else if(selector.Selection=="mixer-layout")OpenMixerLayout();
+            if(selector.Selection=="styles")OpenStyles();else if(selector.Selection=="mixer-layout")OpenMixerLayout();else if(selector.Selection=="windows-icons")OpenWindowsIcons();
+        }
+        internal void OpenWindowsIcons()
+        {
+            if(iconPicker==null)
+            {
+                iconPicker=new IconPickerWindow(themes,manager.Modules){Owner=this};
+                System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(iconPicker);
+                iconPicker.Closed+=delegate{iconPicker=null;};
+            }
+            else iconPicker.UpdateTargets(manager.Modules);
+            SettingsPlacement.Place(this,iconPicker);iconPicker.Show();iconPicker.Activate();
         }
         internal void OpenMixerLayout()
         {
@@ -260,8 +273,8 @@ namespace ReFix.Hub
         private void ControlsChanged(object sender,EventArgs e){if(!exiting&&!Dispatcher.HasShutdownStarted)Dispatcher.BeginInvoke(new Action(delegate{if(!exiting)RefreshControls();}));}
         private void RefreshControls(){HotkeyRuntimeStatus state=controls.GetRuntime("hub.toggle");string key=state==null?controls.Current.Get("hub.toggle"):state.Actual;shortcut.Text=(string.IsNullOrEmpty(key)?"Показ через трей":key)+"\nКрестик скрывает HUB";}
         internal void ShowHub() { Show(); WindowState=WindowState.Normal; Native.SetForegroundWindow(new WindowInteropHelper(this).Handle); Activate(); }
-        internal void HideHub() { if(editor!=null) editor.Hide();if(controlsEditor!=null)controlsEditor.Hide();if(behaviorEditor!=null)behaviorEditor.Hide();if(linksEditor!=null)linksEditor.Hide();if(mixerEditor!=null)mixerEditor.Hide(); Hide(); }
-        internal void Exit() { exiting=true; if(editor!=null) editor.Close();if(controlsEditor!=null)controlsEditor.Close();if(behaviorEditor!=null)behaviorEditor.Close();if(linksEditor!=null)linksEditor.Close();if(mixerEditor!=null)mixerEditor.Close(); Close(); }
+        internal void HideHub() { if(iconPicker!=null)iconPicker.Hide();if(editor!=null) editor.Hide();if(controlsEditor!=null)controlsEditor.Hide();if(behaviorEditor!=null)behaviorEditor.Hide();if(linksEditor!=null)linksEditor.Hide();if(mixerEditor!=null)mixerEditor.Hide(); Hide(); }
+        internal void Exit() { exiting=true; if(iconPicker!=null)iconPicker.Close();if(editor!=null) editor.Close();if(controlsEditor!=null)controlsEditor.Close();if(behaviorEditor!=null)behaviorEditor.Close();if(linksEditor!=null)linksEditor.Close();if(mixerEditor!=null)mixerEditor.Close(); Close(); }
         internal bool StatusTimerRunning { get { return statusTimer.IsEnabled; } }
     }
 
@@ -275,6 +288,7 @@ namespace ReFix.Hub
         private readonly Button primary,open,update,remove,folder;
         private readonly TextBox installationPath;
         private readonly ModulePreview previewWindow;
+        private readonly HubIcon icon=new HubIcon(21) { Margin=new Thickness(0,0,8,0) };
         private readonly CheckBox selection;
         private readonly Action stateChanged;
         internal bool IsSelected{get{return selection.IsChecked==true;}set{selection.IsChecked=value;}}
@@ -287,7 +301,7 @@ namespace ReFix.Hub
             SetResourceReference(BackgroundProperty,"Hub.Surface"); SetResourceReference(BorderBrushProperty,"Hub.Border");
             Grid layout=new Grid(); layout.ColumnDefinitions.Add(new ColumnDefinition()); layout.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(236) }); Child=layout;
             StackPanel text=new StackPanel { Margin=new Thickness(0,0,16,0) }; layout.Children.Add(text);
-            DockPanel heading=new DockPanel();selection=SelectionUi.Create("Выбрать: "+module.Manifest.Name);selection.Margin=new Thickness(0,3,8,0);selection.Visibility=selectionChanged==null?Visibility.Collapsed:Visibility.Visible;selection.Click+=delegate{if(selectionChanged!=null)selectionChanged(selection.IsChecked==true);};DockPanel.SetDock(selection,Dock.Left);heading.Children.Add(selection); state=Ui.Text("NO",12,"Hub.Muted"); state.FontWeight=FontWeights.Bold; state.Margin=new Thickness(12,3,0,0); DockPanel.SetDock(state,Dock.Right); heading.Children.Add(state); heading.Children.Add(Ui.Text(module.Manifest.Name,18,"Hub.Foreground")); text.Children.Add(heading);
+            DockPanel heading=new DockPanel();selection=SelectionUi.Create("Выбрать: "+module.Manifest.Name);selection.Margin=new Thickness(0,3,8,0);selection.Visibility=selectionChanged==null?Visibility.Collapsed:Visibility.Visible;selection.Click+=delegate{if(selectionChanged!=null)selectionChanged(selection.IsChecked==true);};DockPanel.SetDock(selection,Dock.Left);heading.Children.Add(selection); state=Ui.Text("NO",12,"Hub.Muted"); state.FontWeight=FontWeights.Bold; state.Margin=new Thickness(12,3,0,0); DockPanel.SetDock(state,Dock.Right); heading.Children.Add(state);DockPanel.SetDock(icon,Dock.Left);heading.Children.Add(icon);heading.Children.Add(Ui.Text(module.Manifest.Name,18,"Hub.Foreground")); text.Children.Add(heading);
             version=Ui.Text("",12,"Hub.Foreground"); version.Margin=new Thickness(0,4,0,9); text.Children.Add(version);
             text.Children.Add(Ui.Text(module.Manifest.Description,12,"Hub.Muted"));
             details=Ui.Text("",11,"Hub.Muted"); details.Margin=new Thickness(0,7,0,0); text.Children.Add(details);
@@ -333,7 +347,7 @@ namespace ReFix.Hub
             bool enable=View.State!="ON";await HubWindow.ToggleModule(manager,controls,View,enable);
             if(enable&&View.Manifest.Kind=="process")await manager.ShowAsync(View);
         });}
-        internal void ApplyPreview(ThemeProfile profile){previewWindow.ApplyTheme(profile);}
+        internal void ApplyPreview(ThemeProfile profile){icon.Update(View.Manifest.Id,profile);previewWindow.ApplyTheme(profile);}
         private async void Run(Func<Task> action) { try { await action(); notify("Готово: "+View.Manifest.Name); } catch(Exception ex) { notify(ex.Message); } finally { Update(); } }
         public void Dispose() { View.PropertyChanged-=Changed;previewWindow.Dispose(); }
     }

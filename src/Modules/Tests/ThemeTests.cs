@@ -6,6 +6,7 @@ using System.Windows.Documents;
 using ReFix.QuickNote;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using ReFix.Shared;
 
 internal static class ModuleThemeTests
@@ -149,6 +150,8 @@ internal static class ModuleThemeTests
                     tabs.SelectedIndex=0;tabs.SelectedIndex=1;
                     Require(Object.ReferenceEquals(editor,Editor(controller.Editor(record))),"Tab switching must keep the editor and its undo stack");
                     VerifyWorkspaceFeatures(controller.Editor(record),Paths.Root);
+                    controller.Open(record);
+                    VerifyImmediateFormatting(controller.Editor(record));
                     VerifyListEditing(controller.Editor(record));
                 }
                 }
@@ -218,6 +221,48 @@ internal static class ModuleThemeTests
         Require(((Paragraph)restored.Blocks.FirstBlock).Margin.Left==24,"Paragraph indentation survives save and restore");
         changeIndent.Invoke(note,new object[]{false});
         Require(single.Margin.Left==0,"Indentation can be reduced");
+        var field=((DockPanel)note.Content).Children.OfType<WrapPanel>().SelectMany(panel=>panel.Children.OfType<StackPanel>())
+            .SelectMany(panel=>panel.Children.OfType<TextBox>()).Single(t=>System.Windows.Automation.AutomationProperties.GetName(t)=="Шаг отступа");
+        field.Text="37";
+        var range=typeof(NoteEditor).GetMethod("TrySetIndentStep",fields);
+        Require((bool)range.Invoke(note,new object[]{field.Text}),"A custom step outside the presets must be accepted");
+        Require(!(bool)range.Invoke(note,new object[]{"0"})&&!(bool)range.Invoke(note,new object[]{"121"}),"Invalid custom steps are rejected");
+        changeIndent.Invoke(note,new object[]{true});
+        Require(single.Margin.Left==37&&note.Save(),"The custom step must be used and saved");
+        var record=(NoteRecord)typeof(NoteEditor).GetField("note",fields).GetValue(note);
+        Require(new Library(Paths.Root).Index.Notes.Single(item=>item.Id==record.Id).IndentStep==37,"Custom step survives reopening the library");
+        var customItem=new Paragraph(new Run("Первый"));
+        var listCustom=new System.Windows.Documents.List(new ListItem(customItem));
+        editor.Document=new FlowDocument(listCustom);
+        editor.CaretPosition=customItem.ContentStart;
+        changeIndent.Invoke(note,new object[]{true});
+        Require(listCustom.Padding.Left==37&&listCustom.ListItems.FirstListItem.Margin.Left==37,"Custom steps also apply to list indentation");
+    }
+
+    static void VerifyImmediateFormatting(NoteEditor note)
+    {
+        var editor=Editor(note);
+        var selected=new Run("Альфа");
+        var tail=new Run(" Бета");
+        editor.Document=new FlowDocument(new Paragraph { Inlines={selected,tail} });
+        editor.Focus();
+        editor.Selection.Select(selected.ContentStart, selected.ContentEnd);
+        var toolbar=((DockPanel)note.Content).Children.OfType<WrapPanel>().First();
+        var size=toolbar.Children.OfType<ComboBox>().Single(c=>Convert.ToString(c.ToolTip)=="Размер шрифта");
+        size.Focus();
+        size.SelectedItem=24;
+        Require(editor.IsInactiveSelectionHighlightEnabled,"Selection must stay visible when the toolbar gains focus");
+        Require(editor.Selection.Text=="Альфа","Changing size must preserve the exact selection");
+        Require((double)editor.Selection.GetPropertyValue(TextElement.FontSizeProperty)==32&&tail.FontSize!=32,"Size must affect the existing selection immediately");
+        var bold=toolbar.Children.OfType<Button>().Single(b=>Convert.ToString(b.ToolTip)=="Жирный");
+        bold.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        Require(editor.Selection.Text=="Альфа"&&(FontWeight)editor.Selection.GetPropertyValue(TextElement.FontWeightProperty)==FontWeights.Bold,"The next toolbar command must keep and format the same range");
+        var range=new TextRange(editor.Selection.Start,editor.Selection.End);
+        typeof(NoteEditor).GetMethod("ApplyColor",BindingFlags.Instance|BindingFlags.NonPublic)
+            .Invoke(note,new object[]{range,TextElement.ForegroundProperty,"#22CC77"});
+        var color=Color.FromRgb(34,204,119);
+        Require(((SolidColorBrush)editor.Selection.GetPropertyValue(TextElement.ForegroundProperty)).Color==color&&
+            ((SolidColorBrush)editor.SelectionTextBrush).Color==color&&editor.Selection.Text=="Альфа","The chosen color must be visible on the retained selection");
     }
 
     static void VerifyWorkspaceFeatures(NoteEditor note,string directory)

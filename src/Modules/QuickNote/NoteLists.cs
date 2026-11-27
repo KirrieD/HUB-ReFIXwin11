@@ -11,7 +11,9 @@ namespace ReFix.QuickNote
     {
         static readonly int[] IndentSteps = { 12, 18, 24, 30, 36, 48, 60, 72 };
         const int DefaultIndentStep = 24;
-        int IndentStep { get { return IndentSteps.Contains(note.IndentStep) ? note.IndentStep : DefaultIndentStep; } }
+        const int MaximumIndentStep = 120;
+        internal const int MaximumFirstItemIndent = 720;
+        int IndentStep { get { return note.IndentStep>0&&note.IndentStep<=MaximumIndentStep?note.IndentStep:DefaultIndentStep; } }
 
         void ConfigureListInput()
         {
@@ -34,20 +36,56 @@ namespace ReFix.QuickNote
         {
             tools.Children.Add(FormatButton("⇤", "Уменьшить отступ", () => ChangeIndent(false), FontWeights.Normal, FontStyles.Normal, null));
             tools.Children.Add(FormatButton("⇥", "Увеличить отступ", () => ChangeIndent(true), FontWeights.Normal, FontStyles.Normal, null));
-            var step = new ComboBox { MinWidth = 108, ToolTip = "Шаг отступа", Margin = new Thickness(0, 2, 6, 2) };
-            foreach (int value in IndentSteps) step.Items.Add("Отступ " + value);
-            step.SelectedIndex = Array.IndexOf(IndentSteps, IndentStep);
-            step.SelectionChanged += delegate
+            const string hint = "Шаг отступа от 1 до 120. Нажмите Enter для применения.";
+            var group=new StackPanel { Orientation=Orientation.Horizontal,Margin=new Thickness(0,2,6,2) };
+            group.Children.Add(new TextBlock {Text="Шаг",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,5,0)});
+            var field=Field(IndentStep.ToString(),3);
+            field.Width=44;field.TextAlignment=TextAlignment.Center;field.ToolTip=hint;
+            System.Windows.Automation.AutomationProperties.SetName(field,"Шаг отступа");
+            group.Children.Add(field);
+            var presets=new ComboBox { MinWidth=85,ToolTip="Готовые шаги отступа",Margin=new Thickness(4,0,0,0) };
+            System.Windows.Automation.AutomationProperties.SetName(presets,"Готовые шаги отступа");
+            presets.Items.Add("Готовые");
+            foreach(int value in IndentSteps)presets.Items.Add(value);
+            presets.SelectedIndex=0;
+            presets.SelectionChanged+=delegate
             {
-                if (step.SelectedIndex < 0) return;
-                int previousStep = IndentStep;
-                note.IndentStep = IndentSteps[step.SelectedIndex];
-                ApplyListSpacing(editor.Document.Blocks, previousStep);
-                metadataDirty = true;
-                QueueSave();
-                editor.Focus();
+                if(!(presets.SelectedItem is int))return;
+                var range=FormattingRange();
+                TrySetIndentStep(presets.SelectedItem.ToString());
+                field.Text=IndentStep.ToString();
+                presets.SelectedIndex=0;
+                FocusEditorAt(range);
             };
-            tools.Children.Add(step);
+            group.Children.Add(presets);
+            field.PreviewKeyDown+=delegate(object sender,KeyEventArgs e)
+            {
+                if(e.Key!=Key.Enter)return;
+                e.Handled=true;
+                var range=FormattingRange();
+                if(TrySetIndentStep(field.Text))FocusEditorAt(range);
+                else {status.Text=hint;field.SelectAll();}
+            };
+            field.LostKeyboardFocus+=delegate
+            {
+                if(!TrySetIndentStep(field.Text))status.Text=hint;
+                field.Text=IndentStep.ToString();
+            };
+            tools.Children.Add(group);
+        }
+
+        bool TrySetIndentStep(string input)
+        {
+            int value;
+            if(!Int32.TryParse(input,out value)||value<1||value>MaximumIndentStep)return false;
+            int previous=IndentStep;
+            if(value==previous)return true;
+            note.IndentStep=value;
+            ApplyListSpacing(editor.Document.Blocks,previous);
+            bodyDirty=true;
+            metadataDirty=true;
+            QueueSave();
+            return true;
         }
 
         bool TryStartList()
@@ -105,7 +143,6 @@ namespace ReFix.QuickNote
 
         void ChangeIndent(bool increase)
         {
-            editor.Focus();
             editor.BeginChange();
             try
             {
@@ -118,7 +155,7 @@ namespace ReFix.QuickNote
                     {
                         // A first item has no preceding sibling to act as the parent of a nested list.
                         var margin = item.Margin;
-                        margin.Left = Math.Max(0, Math.Min(10 * IndentStep, firstItemIndent + (increase ? IndentStep : -IndentStep)));
+                        margin.Left = Math.Max(0, Math.Min(Math.Min(MaximumFirstItemIndent,10*IndentStep), firstItemIndent + (increase ? IndentStep : -IndentStep)));
                         item.Margin = margin;
                     }
                     else if (increase || list.Parent is ListItem)
@@ -161,7 +198,7 @@ namespace ReFix.QuickNote
                     if (previousStep > 0 && previousStep != IndentStep && LeftIndent(item.Margin) > 0)
                     {
                         var margin = item.Margin;
-                        margin.Left = Math.Min(10 * IndentStep, margin.Left / previousStep * IndentStep);
+                        margin.Left = Math.Min(Math.Min(MaximumFirstItemIndent,10*IndentStep), margin.Left / previousStep * IndentStep);
                         item.Margin = margin;
                     }
                     ApplyListSpacing(item.Blocks, previousStep);

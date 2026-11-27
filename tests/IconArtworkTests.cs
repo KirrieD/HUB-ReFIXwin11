@@ -30,6 +30,21 @@ internal static class IconArtworkTests {
   p.Accent="invalid";p.Foreground=null;p.Mode="Custom";using(var b=Draw("hub",16,p))Check(b.Width==16,"Malformed profile must remain renderable");Check(p.Accent=="invalid","Renderer must not mutate supplied profile");
   int before=GetGuiResources(System.Diagnostics.Process.GetCurrentProcess().Handle,0);for(int i=0;i<150;i++)using(var icon=(Icon)Renderer.GetMethod("CreateIcon").Invoke(null,new object[]{"hub",16,p})){using(var b=icon.ToBitmap())Check(b.Width==16,"Returned native icon must remain alive");}int after=GetGuiResources(System.Diagnostics.Process.GetCurrentProcess().Handle,0);Check(after-before<10,"Native icon handles leak");
   report("icon artwork: malformed inputs, ownership and GDI lifetime",true);
+  var windowsIcons=new System.Collections.Generic.HashSet<long>();
+  foreach(var item in WindowsStockIcons.Options)using(var image=WindowsStockIcons.CreateBitmap(item.Id,32))
+      if(image!=null)windowsIcons.Add(Hash(image));
+  Check(windowsIcons.Count>=25,"Windows should supply at least 25 distinct stock icons");
+  var settings=new ThemeProfile();
+  settings.WindowsIcons["future-extension"]=3;
+  var copy=settings.Clone();copy.WindowsIcons["future-extension"]=16;
+  Check(settings.WindowsIcons["future-extension"]==3,"Icon preferences must be isolated when cloning");
+  settings.WindowsIcons["bad/id"]=16;settings.WindowsIcons["bad-icon"]=999;settings.Normalize();
+  Check(settings.WindowsIcons.Count==1,"Malformed icon preferences must be dropped");
+  using(var chosen=Draw("future-extension",32,settings))
+  using(var system=WindowsStockIcons.CreateBitmap(3,32))
+  using(var unchanged=Draw("another-extension",32,settings))
+      Check(Hash(chosen)==Hash(system)&&Hash(chosen)!=Hash(unchanged),"An extension gets its exact Windows icon independently of other extensions");
+  report("icon artwork: Windows catalogue, native colours and per-extension choices",true);
   foreach(var assembly in AppDomain.CurrentDomain.GetAssemblies())Check(assembly.GetName().Name!="PresentationFramework","Icon rendering must not eagerly load WPF");report("icon artwork: rendering keeps WPF lazy",true);
  }
 }

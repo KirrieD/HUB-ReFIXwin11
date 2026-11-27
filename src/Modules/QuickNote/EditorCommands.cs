@@ -105,11 +105,20 @@ namespace ReFix.QuickNote
             fonts.SelectionChanged += delegate
             {
                 var font = fonts.SelectedItem as FontFamily;
-                if (font != null) editor.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, font);
-                editor.Focus();
+                if (font == null) return;
+                ApplyFormatting(() => editor.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, font));
+                fonts.SelectedIndex=0;
             };
             var sizes = new ComboBox { Width = 57, ToolTip = "Размер шрифта", Margin = new Thickness(0,2,6,2), ItemsSource = new object[] { "Кегль",8,9,10,11,12,14,16,18,20,24,28,32,36,48,72 }, SelectedIndex = 0 };
-            sizes.SelectionChanged += delegate { if (sizes.SelectedItem is int) editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, (int)sizes.SelectedItem * 4.0 / 3); editor.Focus(); };
+            sizes.SelectionChanged += delegate
+            {
+                if (sizes.SelectedItem is int)
+                {
+                    double size=(int)sizes.SelectedItem*4.0/3;
+                    ApplyFormatting(() => editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty,size));
+                    sizes.SelectedIndex=0;
+                }
+            };
             tools.Children.Insert(0, fonts);
             tools.Children.Insert(1, sizes);
             var alignment = new ComboBox { Width = 140, ToolTip = "Выравнивание абзацев", Margin = new Thickness(0,2,6,2) };
@@ -119,9 +128,8 @@ namespace ReFix.QuickNote
             {
                 if (alignment.SelectedIndex <= 0) return;
                 var value = new[] { TextAlignment.Left, TextAlignment.Center, TextAlignment.Right, TextAlignment.Justify }[alignment.SelectedIndex - 1];
-                editor.Selection.ApplyPropertyValue(Paragraph.TextAlignmentProperty, value);
+                ApplyFormatting(() => editor.Selection.ApplyPropertyValue(Paragraph.TextAlignmentProperty,value));
                 alignment.SelectedIndex = 0;
-                editor.Focus();
             };
             tools.Children.Add(alignment);
             Button levels = null;
@@ -132,11 +140,11 @@ namespace ReFix.QuickNote
                 foreach (var marker in new[] { TextMarkerStyle.Disc, TextMarkerStyle.Circle, TextMarkerStyle.Square, TextMarkerStyle.Decimal, TextMarkerStyle.LowerLatin, TextMarkerStyle.UpperRoman })
                 {
                     string label = new Dictionary<TextMarkerStyle,string>{{TextMarkerStyle.Disc,"● Маркер"},{TextMarkerStyle.Circle,"○ Круг"},{TextMarkerStyle.Square,"■ Квадрат"},{TextMarkerStyle.Decimal,"1. 2. 3."},{TextMarkerStyle.LowerLatin,"a. b. c."},{TextMarkerStyle.UpperRoman,"I. II. III."}}[marker];
-                    Command(menu, label, () => SetMarker(marker));
+                    Command(menu, label, () => ApplyFormatting(() => SetMarker(marker)));
                 }
                 menu.Items.Add(new Separator());
-                Command(menu, "Увеличить отступ", () => ChangeIndent(true));
-                Command(menu, "Уменьшить отступ", () => ChangeIndent(false));
+                Command(menu, "Увеличить отступ", () => ApplyFormatting(() => ChangeIndent(true)));
+                Command(menu, "Уменьшить отступ", () => ApplyFormatting(() => ChangeIndent(false)));
                 menu.IsOpen = true;
             });
             tools.Children.Add(levels);
@@ -147,7 +155,6 @@ namespace ReFix.QuickNote
 
         void SetMarker(TextMarkerStyle marker)
         {
-            editor.Focus();
             var item = editor.CaretPosition.Paragraph == null ? null : editor.CaretPosition.Paragraph.Parent as ListItem;
             if (item == null)
             {
