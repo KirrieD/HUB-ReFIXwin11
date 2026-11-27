@@ -48,7 +48,7 @@ namespace ReFix.QuickNote
             DockPanel.SetDock(top, Dock.Top);
             root.Children.Add(top);
             tabs.Resources.Add(typeof(TabItem), System.Windows.Markup.XamlReader.Parse(@"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='TabItem'><Setter Property='Foreground' Value='{DynamicResource Hub.Foreground}'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='TabItem'><Border x:Name='tab' CornerRadius='7,7,0,0' Background='Transparent' Padding='5,4' Margin='1,0'><ContentPresenter ContentSource='Header'/></Border><ControlTemplate.Triggers><Trigger Property='IsSelected' Value='True'><Setter TargetName='tab' Property='Background' Value='{DynamicResource Hub.Surface}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>"));
-            tabs.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(@"<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='TabControl'><DockPanel><DockPanel DockPanel.Dock='Top' Background='{DynamicResource Hub.Background}'><ScrollViewer HorizontalScrollBarVisibility='Auto' VerticalScrollBarVisibility='Disabled' CanContentScroll='False'><StackPanel Orientation='Horizontal'><TabPanel IsItemsHost='True'/><Button x:Name='NewTabButton' Content='+' ToolTip='Добавить заметку' MinWidth='27' Margin='3'/></StackPanel></ScrollViewer></DockPanel><ContentPresenter x:Name='PART_SelectedContentHost' ContentSource='SelectedContent'/></DockPanel></ControlTemplate>");
+            tabs.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(@"<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='TabControl'><DockPanel><DockPanel DockPanel.Dock='Top' Background='{DynamicResource Hub.Background}'><ScrollViewer HorizontalScrollBarVisibility='Auto' VerticalScrollBarVisibility='Disabled' CanContentScroll='False'><StackPanel Orientation='Horizontal'><TabPanel IsItemsHost='True'/><Button x:Name='NewTabButton' Content='+' ToolTip='Создать или открыть заметку' MinWidth='27' Margin='3'/></StackPanel></ScrollViewer></DockPanel><ContentPresenter x:Name='PART_SelectedContentHost' ContentSource='SelectedContent'/></DockPanel></ControlTemplate>");
             tabs.AddHandler(Button.ClickEvent,new RoutedEventHandler(delegate(object sender,RoutedEventArgs args)
             {
                 var button = args.OriginalSource as Button;
@@ -61,6 +61,19 @@ namespace ReFix.QuickNote
                     item.Click += delegate { controller.NewNote(list,markdown); };
                     menu.Items.Add(item);
                 }
+                var closed=library.Index.Notes.Where(n=>n.ListId==list.Id&&n.TabClosed).ToArray();
+                if(closed.Length>0)
+                {
+                    var reopen=new MenuItem { Header="Открыть закрытую заметку" };
+                    foreach(var note in closed)
+                    {
+                        var item=new MenuItem { Header=note.Name };
+                        item.Click+=delegate{controller.Open(note);};
+                        reopen.Items.Add(item);
+                    }
+                    menu.Items.Add(new Separator());
+                    menu.Items.Add(reopen);
+                }
                 menu.IsOpen=true;
             }));
             root.Children.Add(tabs);
@@ -71,7 +84,8 @@ namespace ReFix.QuickNote
             {
                 if (refreshing || e.Source != tabs) return;
                 var item = tabs.SelectedItem as TabItem;
-                if (item != null && item.Content == null) controller.Run(() => item.Content = controller.Editor((NoteRecord)item.Tag));
+                if(item==null)return;
+                if (item.Content == null) controller.Run(() => item.Content = controller.Editor((NoteRecord)item.Tag));
                 if (item.Content != null) list.LastNoteId = ((NoteRecord)item.Tag).Id;
                 var header = item.Header as FrameworkElement;
                 if (header != null) header.BringIntoView();
@@ -81,7 +95,11 @@ namespace ReFix.QuickNote
         }
 
         internal void ApplyTheme(ThemeProfile theme) { surface.Apply(this, theme); NoteDisclosureStyle.Apply(this, theme); }
-        internal void Open(NoteRecord note) { Refresh(note); Show(); Activate(); }
+        internal void Open(NoteRecord note)
+        {
+            if(note!=null)library.SetTabClosed(note,false);
+            Refresh(note);Show();Activate();
+        }
         internal void Minimize() { if (controller.SaveList(list.Id)) Hide(); }
 
         internal void Detach(string id)
@@ -94,7 +112,7 @@ namespace ReFix.QuickNote
         {
             heading.Text = list.Name;
             Title = list.Name + " · Быстрая заметка";
-            var notes = library.Index.Notes.Where(n => n.ListId == list.Id).ToArray();
+            var notes = library.Index.Notes.Where(n => n.ListId == list.Id && !n.TabClosed).ToArray();
             var items = tabs.Items.OfType<TabItem>().ToArray();
             var selected = tabs.SelectedItem as TabItem;
             var wanted = preferred ?? (selected == null ? notes.FirstOrDefault(n => n.Id == list.LastNoteId) : (NoteRecord)selected.Tag);
@@ -110,10 +128,10 @@ namespace ReFix.QuickNote
                 foreach (TabItem item in tabs.Items)
                 {
                     var note = (NoteRecord)item.Tag;
-                    ((TextBlock)item.Header).Text = note.Name;
+                    ((DockPanel)item.Header).Children.OfType<TextBlock>().Single().Text = note.Name;
                 }
                 var target = tabs.Items.OfType<TabItem>().FirstOrDefault(i => i.Tag == wanted) ?? tabs.Items.OfType<TabItem>().FirstOrDefault();
-                if (target == null) return;
+                if (target == null) { list.LastNoteId=null;return; }
                 if (target.Content == null) target.Content = controller.Editor((NoteRecord)target.Tag);
                 tabs.SelectedItem = target;
                 list.LastNoteId = ((NoteRecord)target.Tag).Id;
@@ -121,26 +139,58 @@ namespace ReFix.QuickNote
             finally { refreshing = false; }
         }
 
+        void CloseTab(NoteRecord note)
+        {
+            controller.Run(delegate
+            {
+                var item=tabs.Items.OfType<TabItem>().FirstOrDefault(tab=>tab.Tag==note);
+                if(item==null)return;
+                if(!controller.SaveEditor(note)){tabs.SelectedItem=item;return;}
+                var next=tabs.SelectedItem as TabItem;
+                if(next==item)
+                {
+                    int index=tabs.Items.IndexOf(item);
+                    next=(index+1<tabs.Items.Count?tabs.Items[index+1]:index>0?tabs.Items[index-1]:null) as TabItem;
+                }
+                library.SetTabClosed(note,true);
+                refreshing=true;
+                try { item.Content=null;tabs.Items.Remove(item); }
+                finally { refreshing=false; }
+                controller.ReleaseEditor(note);
+                Refresh(next==null?null:(NoteRecord)next.Tag);
+            });
+        }
+
         TabItem Tab(NoteRecord note)
         {
-            var header = new TextBlock { Text = note.Name, MaxWidth = 170, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6,3,6,3) };
+            var header=new DockPanel { Background=Brushes.Transparent };
+            var label=new TextBlock { Text=note.Name,MaxWidth=170,TextTrimming=TextTrimming.CharacterEllipsis,Margin=new Thickness(6,3,4,3),VerticalAlignment=VerticalAlignment.Center };
+            var close=NoteEditor.Button("×",()=>CloseTab(note));
+            close.Width=19;close.Height=19;close.Margin=new Thickness(1,0,2,0);close.Padding=new Thickness(0);close.Focusable=false;
+            close.ToolTip="Закрыть заметку";
+            System.Windows.Automation.AutomationProperties.SetName(close,"Закрыть заметку");
+            DockPanel.SetDock(close,Dock.Right);header.Children.Add(close);header.Children.Add(label);
             var item = new TabItem { Header = header, Tag = note };
             var menu = ThemeMenu.Create(Resources);
             menu.Opened += delegate
             {
                 menu.Items.Clear();
-                foreach (var target in library.Index.Lists.Where(l => l.Id != list.Id))
+                var closeItem=new MenuItem { Header="Закрыть заметку" };
+                closeItem.Click+=delegate{CloseTab(note);};
+                menu.Items.Add(closeItem);
+                var targets=library.Index.Lists.Where(l=>l.Id!=list.Id).ToArray();
+                if(targets.Length>0)menu.Items.Add(new Separator());
+                foreach (var target in targets)
                 {
                     var move = new MenuItem { Header = "Перенести → " + target.Name };
                     move.Click += delegate { controller.Move(note.Id, target); };
                     menu.Items.Add(move);
                 }
-                if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "Других списков пока нет", IsEnabled = false });
             };
             header.ContextMenu = menu;
             Point start = new Point();
             bool armed = false;
-            header.PreviewMouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { start = e.GetPosition(header); armed = true; };
+            header.PreviewMouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { start = e.GetPosition(header); armed = !close.IsMouseOver; };
             header.PreviewMouseLeftButtonUp += delegate { armed = false; };
             header.PreviewMouseMove += delegate(object sender, MouseEventArgs e)
             {

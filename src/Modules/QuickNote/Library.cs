@@ -19,6 +19,7 @@ namespace ReFix.QuickNote
         public string BottomHint { get; set; }
         public string WorkspaceColor { get; set; }
         public int IndentStep { get; set; }
+        public bool TabClosed { get; set; }
     }
 
     public sealed class NoteList
@@ -103,6 +104,14 @@ namespace ReFix.QuickNote
         }
 
         internal void Save() { Atomic(indexPath, stream => { using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024, true)) writer.Write(json.Serialize(Index)); }); }
+
+        internal void SetTabClosed(NoteRecord note,bool closed)
+        {
+            if(note.TabClosed==closed)return;
+            note.TabClosed=closed;
+            try{Save();}
+            catch{note.TabClosed=!closed;throw;}
+        }
 
         string BodyPath(NoteRecord note)
         {

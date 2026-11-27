@@ -154,6 +154,20 @@ internal static class ModuleThemeTests
                     VerifyImmediateFormatting(controller.Editor(record));
                     VerifyListEditing(controller.Editor(record));
                     VerifyParagraphSpacing(controller.Editor(record));
+                    var targetTab=tabs.Items.OfType<TabItem>().Single(t=>t.Tag==record);
+                    var close=((DockPanel)targetTab.Header).Children.OfType<Button>().Single();
+                    close.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                    Require(tabs.Items.Count==1&&((TabItem)tabs.SelectedItem).Tag==secondRecord,"Closing the active note selects the remaining tab");
+                    var onDisk=new Library(Paths.Root);
+                    Require(onDisk.Index.Notes.Count==2&&onDisk.Index.Notes.Single(n=>n.Id==record.Id).TabClosed,"Closing saves the tab status without removing the note");
+                    controller.Open(record);
+                    Require(tabs.Items.Count==2&&!record.TabClosed&&Plain(Editor(controller.Editor(record))).Contains("Первый"),"Reopening restores the saved text and the tab");
+                    var tabMenu=((DockPanel)tabs.Items.OfType<TabItem>().Single(t=>t.Tag==secondRecord).Header).ContextMenu;
+                    tabMenu.IsOpen=true;
+                    var closeFromMenu=tabMenu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Закрыть заметку"));
+                    tabMenu.IsOpen=false;
+                    closeFromMenu.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    Require(tabs.Items.Count==1&&((TabItem)tabs.SelectedItem).Tag==record&&secondRecord.TabClosed,"Context menu closes only the chosen tab");
                 }
                 }
                 System.IO.Directory.Delete(Paths.Root,true);

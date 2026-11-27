@@ -5,7 +5,7 @@ namespace ReFix.Shared
         public const string SystemMonitor = "1.0.4";
         public const string SystemMonitorMinHub = "1.5.1";
         public const string QuietMixer = "1.5.3";
-        public const string QuickNote = "1.6.6";
+        public const string QuickNote = "1.6.7";
         public const string TaskMenu = "1.5.3";
         public const string MiniIcons = "1.5.3";
         public const string QuietMixerMinHub = "1.5.1";

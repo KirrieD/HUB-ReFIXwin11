@@ -97,6 +97,20 @@ namespace ReFix.QuickNote
 
         internal void Open(NoteRecord note) { OpenList(library.Index.Lists.First(l => l.Id == note.ListId), note); }
 
+        internal bool SaveEditor(NoteRecord note)
+        {
+            NoteEditor editor;
+            return !editors.TryGetValue(note.Id,out editor)||editor.Save();
+        }
+
+        internal void ReleaseEditor(NoteRecord note)
+        {
+            NoteEditor editor;
+            if(!editors.TryGetValue(note.Id,out editor))return;
+            editors.Remove(note.Id);
+            editor.Dispose();
+        }
+
         internal void OpenList(NoteList list, NoteRecord note = null)
         {
             Run(delegate
