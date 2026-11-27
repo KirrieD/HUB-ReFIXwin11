@@ -148,7 +148,10 @@ namespace ReFix.QuickNote
                     html.Append("</").Append(tag).Append(">");
                     continue;
                 }
-                html.Append("<p style=\"white-space:pre-wrap;text-align:").Append(Alignment(block.Alignment)).Append("\">");
+                html.Append("<p style=\"white-space:pre-wrap;text-align:").Append(Alignment(block.Alignment));
+                if(block.SpaceBefore.HasValue)html.Append(";margin-top:").Append(block.SpaceBefore.Value.ToString("0.##",CultureInfo.InvariantCulture)).Append("px");
+                if(block.SpaceAfter.HasValue)html.Append(";margin-bottom:").Append(block.SpaceAfter.Value.ToString("0.##",CultureInfo.InvariantCulture)).Append("px");
+                html.Append("\">");
                 foreach (var part in block.Parts)
                 {
                     if (part.Break) html.Append("<br>");

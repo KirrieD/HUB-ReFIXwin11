@@ -153,6 +153,7 @@ internal static class ModuleThemeTests
                     controller.Open(record);
                     VerifyImmediateFormatting(controller.Editor(record));
                     VerifyListEditing(controller.Editor(record));
+                    VerifyParagraphSpacing(controller.Editor(record));
                 }
                 }
                 System.IO.Directory.Delete(Paths.Root,true);
@@ -221,7 +222,7 @@ internal static class ModuleThemeTests
         Require(((Paragraph)restored.Blocks.FirstBlock).Margin.Left==24,"Paragraph indentation survives save and restore");
         changeIndent.Invoke(note,new object[]{false});
         Require(single.Margin.Left==0,"Indentation can be reduced");
-        var field=((DockPanel)note.Content).Children.OfType<WrapPanel>().SelectMany(panel=>panel.Children.OfType<StackPanel>())
+        var field=ToolbarGroups(note).SelectMany(panel=>panel.Children.OfType<StackPanel>())
             .SelectMany(panel=>panel.Children.OfType<TextBox>()).Single(t=>System.Windows.Automation.AutomationProperties.GetName(t)=="Шаг отступа");
         field.Text="37";
         var range=typeof(NoteEditor).GetMethod("TrySetIndentStep",fields);
@@ -239,6 +240,57 @@ internal static class ModuleThemeTests
         Require(listCustom.Padding.Left==37&&listCustom.ListItems.FirstListItem.Margin.Left==37,"Custom steps also apply to list indentation");
     }
 
+    static System.Collections.Generic.IEnumerable<WrapPanel> ToolbarGroups(NoteEditor note)
+    {
+        var toolbar=((DockPanel)note.Content).Children.OfType<ScrollViewer>().Single();
+        return ((WrapPanel)toolbar.Content).Children.OfType<Border>()
+            .SelectMany(frame=>((StackPanel)frame.Child).Children.OfType<WrapPanel>());
+    }
+
+    static void VerifyParagraphSpacing(NoteEditor note)
+    {
+        var editor=Editor(note);
+        var first=new Paragraph(new Run("Первый")) { Margin=new Thickness(32,0,0,0) };
+        var second=new Paragraph(new Run("Второй"));
+        var untouched=new Paragraph(new Run("Третий"));
+        editor.Document=new FlowDocument { Blocks={first,second,untouched} };
+        editor.Selection.Select(first.ContentStart,second.ContentEnd);
+        var fields=ToolbarGroups(note).SelectMany(panel=>panel.Children.OfType<StackPanel>())
+            .SelectMany(panel=>panel.Children.OfType<TextBox>()).ToDictionary(t=>System.Windows.Automation.AutomationProperties.GetName(t));
+        Require(ToolbarGroups(note).Count()==7&&fields.ContainsKey("Интервал перед абзацем")&&fields.ContainsKey("Интервал после абзаца"),"Formatting commands are grouped and have both spacing inputs");
+        foreach(var choice in new[]{new{Label="Интервал перед абзацем",Value="18"},new{Label="Интервал после абзаца",Value="7"}})
+        {
+            var field=fields[choice.Label];
+            var keyboard=System.Windows.Input.Keyboard.PrimaryDevice;
+            field.RaiseEvent(new System.Windows.Input.KeyboardFocusChangedEventArgs(keyboard,0,editor,field)
+                {RoutedEvent=System.Windows.Input.Keyboard.GotKeyboardFocusEvent});
+            field.Text=choice.Value;
+            field.RaiseEvent(new System.Windows.Input.KeyboardFocusChangedEventArgs(keyboard,0,field,editor)
+                {RoutedEvent=System.Windows.Input.Keyboard.LostKeyboardFocusEvent});
+        }
+        Require(first.Margin.Top==18&&second.Margin.Top==18&&first.Margin.Bottom==7&&second.Margin.Bottom==7,
+            "Spacing applies immediately to all selected paragraphs");
+        Require(first.Margin.Left==32&&Double.IsNaN(untouched.Margin.Top)&&!editor.Selection.IsEmpty,
+            "Vertical spacing preserves horizontal indentation, adjacent paragraphs and selection");
+        var restored=new FlowDocument();
+        var blocks=NoteDocument.Capture(editor.Document);
+        NoteDocument.Restore(restored,blocks);
+        var saved=(Paragraph)restored.Blocks.FirstBlock;
+        Require(saved.Margin.Top==18&&saved.Margin.Bottom==7&&saved.Margin.Left==32,"Both vertical offsets survive reopening");
+        string html=Path.Combine(Paths.Root,"spacing.html"),word=Path.Combine(Paths.Root,"spacing.docx");
+        ExportFile.Write(html,".html",blocks,Path.Combine(Paths.Root,"spacing_images"));
+        Require(File.ReadAllText(html).Contains("margin-top:18px;margin-bottom:7px"),"HTML preserves both paragraph intervals");
+        ExportFile.Write(word,".docx",blocks,Path.Combine(Paths.Root,"spacing_images"));
+        using(var file=File.OpenRead(word))
+        using(var zip=new System.IO.Compression.ZipArchive(file,System.IO.Compression.ZipArchiveMode.Read))
+        using(var input=zip.GetEntry("word/document.xml").Open())
+        {
+            var name=System.Xml.Linq.XNamespace.Get("http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+            var spacing=System.Xml.Linq.XDocument.Load(input).Descendants(name+"spacing").First();
+            Require((string)spacing.Attribute(name+"before")=="270"&&(string)spacing.Attribute(name+"after")=="105","DOCX preserves both paragraph intervals in twips");
+        }
+    }
+
     static void VerifyImmediateFormatting(NoteEditor note)
     {
         var editor=Editor(note);
@@ -247,14 +299,14 @@ internal static class ModuleThemeTests
         editor.Document=new FlowDocument(new Paragraph { Inlines={selected,tail} });
         editor.Focus();
         editor.Selection.Select(selected.ContentStart, selected.ContentEnd);
-        var toolbar=((DockPanel)note.Content).Children.OfType<WrapPanel>().First();
-        var size=toolbar.Children.OfType<ComboBox>().Single(c=>Convert.ToString(c.ToolTip)=="Размер шрифта");
+        var toolbar=ToolbarGroups(note).SelectMany(group=>group.Children.Cast<UIElement>());
+        var size=toolbar.OfType<ComboBox>().Single(c=>Convert.ToString(c.ToolTip)=="Размер шрифта");
         size.Focus();
         size.SelectedItem=24;
         Require(editor.IsInactiveSelectionHighlightEnabled,"Selection must stay visible when the toolbar gains focus");
         Require(editor.Selection.Text=="Альфа","Changing size must preserve the exact selection");
         Require((double)editor.Selection.GetPropertyValue(TextElement.FontSizeProperty)==32&&tail.FontSize!=32,"Size must affect the existing selection immediately");
-        var bold=toolbar.Children.OfType<Button>().Single(b=>Convert.ToString(b.ToolTip)=="Жирный");
+        var bold=toolbar.OfType<Button>().Single(b=>Convert.ToString(b.ToolTip)=="Жирный");
         bold.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         Require(editor.Selection.Text=="Альфа"&&(FontWeight)editor.Selection.GetPropertyValue(TextElement.FontWeightProperty)==FontWeights.Bold,"The next toolbar command must keep and format the same range");
         var range=new TextRange(editor.Selection.Start,editor.Selection.End);

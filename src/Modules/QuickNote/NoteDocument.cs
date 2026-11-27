@@ -15,6 +15,8 @@ namespace ReFix.QuickNote
         public string Marker { get; set; }
         public int StartIndex { get; set; }
         public double LeftIndent { get; set; }
+        public double? SpaceBefore { get; set; }
+        public double? SpaceAfter { get; set; }
         public List<List<NoteParagraph>> Items { get; set; }
         public double[] ItemLeftIndents { get; set; }
         public double Size { get; set; }
@@ -40,6 +42,8 @@ namespace ReFix.QuickNote
 
     internal static class NoteDocument
     {
+        internal const int MaximumParagraphSpacing = 120;
+
         internal static List<NoteParagraph> Capture(FlowDocument document)
         {
             return CaptureBlocks(document.Blocks);
@@ -52,7 +56,13 @@ namespace ReFix.QuickNote
             {
                 var paragraph = block as Paragraph;
                 if (paragraph != null)
-                    result.Add(new NoteParagraph { Size = paragraph.FontSize, LeftIndent = double.IsNaN(paragraph.Margin.Left) ? 0 : paragraph.Margin.Left, Alignment = paragraph.TextAlignment.ToString(), Heading = paragraph.FontWeight >= FontWeights.SemiBold, Parts = CaptureInlines(paragraph.Inlines).ToList() });
+                    result.Add(new NoteParagraph
+                    {
+                        Size=paragraph.FontSize,LeftIndent=double.IsNaN(paragraph.Margin.Left)?0:paragraph.Margin.Left,
+                        SpaceBefore=StoredSpacing(paragraph.Margin.Top),SpaceAfter=StoredSpacing(paragraph.Margin.Bottom),
+                        Alignment=paragraph.TextAlignment.ToString(),Heading=paragraph.FontWeight>=FontWeights.SemiBold,
+                        Parts=CaptureInlines(paragraph.Inlines).ToList()
+                    });
                 var list = block as System.Windows.Documents.List;
                 if (list != null)
                     result.Add(new NoteParagraph
@@ -65,6 +75,11 @@ namespace ReFix.QuickNote
                     });
             }
             return result;
+        }
+
+        static double? StoredSpacing(double value)
+        {
+            return Double.IsNaN(value)?(double?)null:Math.Max(0,Math.Min(MaximumParagraphSpacing,value));
         }
 
         internal static IEnumerable<Paragraph> Paragraphs(BlockCollection blocks)
@@ -192,7 +207,14 @@ namespace ReFix.QuickNote
                 TextAlignment alignment;
                 if (!Enum.TryParse(record.Alignment, out alignment) || !Enum.IsDefined(typeof(TextAlignment), alignment)) alignment = TextAlignment.Left;
                 var paragraph = new Paragraph { TextAlignment = alignment, FontSize = FontSize(record.Size), FontWeight = record.Heading ? FontWeights.SemiBold : FontWeights.Normal };
-                if (record.LeftIndent > 0) paragraph.Margin = new Thickness(Math.Min(480, record.LeftIndent), 0, 0, 0);
+                if (record.LeftIndent > 0 || record.SpaceBefore.HasValue || record.SpaceAfter.HasValue)
+                {
+                    var margin=paragraph.Margin;
+                    if(record.LeftIndent>0)margin.Left=Math.Min(480,record.LeftIndent);
+                    if(record.SpaceBefore.HasValue)margin.Top=StoredSpacing(record.SpaceBefore.Value)??Double.NaN;
+                    if(record.SpaceAfter.HasValue)margin.Bottom=StoredSpacing(record.SpaceAfter.Value)??Double.NaN;
+                    paragraph.Margin=margin;
+                }
                 foreach (var part in record.Parts)
                 {
                     if (part.Break) paragraph.Inlines.Add(new LineBreak());

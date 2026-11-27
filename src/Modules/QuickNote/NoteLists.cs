@@ -32,10 +32,10 @@ namespace ReFix.QuickNote
             };
         }
 
-        void AddIndentTools()
+        void AddIndentTools(Panel indentGroup)
         {
-            tools.Children.Add(FormatButton("⇤", "Уменьшить отступ", () => ChangeIndent(false), FontWeights.Normal, FontStyles.Normal, null));
-            tools.Children.Add(FormatButton("⇥", "Увеличить отступ", () => ChangeIndent(true), FontWeights.Normal, FontStyles.Normal, null));
+            indentGroup.Children.Add(FormatButton("⇤", "Уменьшить отступ", () => ChangeIndent(false), FontWeights.Normal, FontStyles.Normal, null));
+            indentGroup.Children.Add(FormatButton("⇥", "Увеличить отступ", () => ChangeIndent(true), FontWeights.Normal, FontStyles.Normal, null));
             const string hint = "Шаг отступа от 1 до 120. Нажмите Enter для применения.";
             var group=new StackPanel { Orientation=Orientation.Horizontal,Margin=new Thickness(0,2,6,2) };
             group.Children.Add(new TextBlock {Text="Шаг",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,5,0)});
@@ -71,7 +71,7 @@ namespace ReFix.QuickNote
                 if(!TrySetIndentStep(field.Text))status.Text=hint;
                 field.Text=IndentStep.ToString();
             };
-            tools.Children.Add(group);
+            indentGroup.Children.Add(group);
         }
 
         bool TrySetIndentStep(string input)

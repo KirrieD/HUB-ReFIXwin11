@@ -85,9 +85,10 @@ namespace ReFix.QuickNote
             AddFindPane();
             if (note.Markdown)
             {
-                tools.Children.Clear();
-                tools.Children.Add(Button("Предпросмотр MD", () => ExecuteSafely(PreviewMarkdown)));
-                tools.Children.Add(Button("Изображение…", () => ExecuteSafely(InsertMarkdownImage)));
+                var markdown=ToolbarGroup("Markdown");
+                markdown.Children.Add(Button("Предпросмотр MD", () => ExecuteSafely(PreviewMarkdown)));
+                markdown.Children.Add(Button("Изображение…", () => ExecuteSafely(InsertMarkdownImage)));
+                AddWorkspaceColorButton(markdown);
                 editor.FontFamily = new FontFamily("Consolas");
             }
             else AddFormatTools();
@@ -97,8 +98,25 @@ namespace ReFix.QuickNote
             PreviewKeyDown += WorkspaceKeys;
         }
 
+        WrapPanel ToolbarGroup(string title)
+        {
+            var frame=new Border { Margin=new Thickness(0,0,5,4),Padding=new Thickness(6,3,2,3),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(6) };
+            frame.SetResourceReference(Border.BorderBrushProperty,"Hub.Border");
+            var panel=new StackPanel();
+            var caption=new TextBlock { Text=title,FontSize=10,Margin=new Thickness(1,0,0,1) };
+            caption.SetResourceReference(TextBlock.ForegroundProperty,"Hub.Muted");
+            panel.Children.Add(caption);
+            var commands=new WrapPanel();
+            panel.Children.Add(commands);
+            frame.Child=panel;
+            System.Windows.Automation.AutomationProperties.SetName(frame,title);
+            tools.Children.Add(frame);
+            return commands;
+        }
+
         void AddFormatTools()
         {
+            var fontGroup=ToolbarGroup("Шрифт");
             var fonts = new ComboBox { Width = 145, MaxDropDownHeight = 330, ToolTip = "Шрифт", IsTextSearchEnabled = true, Margin = new Thickness(0,2,6,2) };
             fonts.ItemsSource = installedFonts.Value;
             fonts.SelectedIndex = 0;
@@ -109,7 +127,7 @@ namespace ReFix.QuickNote
                 ApplyFormatting(() => editor.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, font));
                 fonts.SelectedIndex=0;
             };
-            var sizes = new ComboBox { Width = 57, ToolTip = "Размер шрифта", Margin = new Thickness(0,2,6,2), ItemsSource = new object[] { "Кегль",8,9,10,11,12,14,16,18,20,24,28,32,36,48,72 }, SelectedIndex = 0 };
+            var sizes = new ComboBox { Width = 82, ToolTip = "Размер шрифта", Margin = new Thickness(0,2,6,2), ItemsSource = new object[] { "Кегль",8,9,10,11,12,14,16,18,20,24,28,32,36,48,72 }, SelectedIndex = 0 };
             sizes.SelectionChanged += delegate
             {
                 if (sizes.SelectedItem is int)
@@ -119,8 +137,36 @@ namespace ReFix.QuickNote
                     sizes.SelectedIndex=0;
                 }
             };
-            tools.Children.Insert(0, fonts);
-            tools.Children.Insert(1, sizes);
+            fontGroup.Children.Add(fonts);
+            fontGroup.Children.Add(sizes);
+            fontGroup.Children.Add(FormatButton("B", "Жирный", () => EditingCommands.ToggleBold.Execute(null, editor), FontWeights.Bold, FontStyles.Normal, null));
+            fontGroup.Children.Add(FormatButton("I", "Курсив", () => EditingCommands.ToggleItalic.Execute(null, editor), FontWeights.Normal, FontStyles.Italic, null));
+            fontGroup.Children.Add(FormatButton("S", "Зачёркивание", () => ToggleDecoration(TextDecorationLocation.Strikethrough, TextDecorations.Strikethrough[0]), FontWeights.Normal, FontStyles.Normal, TextDecorations.Strikethrough));
+            fontGroup.Children.Add(FormatButton("P", "Подчёркивание", () => ToggleDecoration(TextDecorationLocation.Underline, TextDecorations.Underline[0]), FontWeights.Normal, FontStyles.Normal, TextDecorations.Underline));
+
+            var colors=ToolbarGroup("Цвета");
+            Button textColor=null, background=null;
+            textColor=Button("Текст",()=>Palette(textColor,TextElement.ForegroundProperty));textColor.ToolTip="Цвет текста";
+            background=Button("Выделение",()=>Palette(background,TextElement.BackgroundProperty));background.ToolTip="Цвет фона текста";
+            colors.Children.Add(textColor);
+            colors.Children.Add(background);
+            AddWorkspaceColorButton(colors);
+
+            var paragraphGroup=ToolbarGroup("Абзац");
+            var styles=new ComboBox { MinWidth=130,Margin=new Thickness(0,2,6,2),ToolTip="Стиль абзаца" };
+            styles.Items.Add(new ComboBoxItem {Content="Стиль абзаца",IsEnabled=false});
+            styles.Items.Add("Обычный текст");
+            for(int i=1;i<=3;i++)styles.Items.Add("Заголовок "+i);
+            for(int i=1;i<=3;i++)styles.Items.Add("Подзаголовок "+i);
+            styles.SelectedIndex=0;
+            styles.SelectionChanged+=delegate
+            {
+                if(styles.SelectedIndex<=0)return;
+                int style=styles.SelectedIndex-1;
+                ApplyFormatting(()=>ApplyStyle(style));
+                styles.SelectedIndex=0;
+            };
+            paragraphGroup.Children.Add(styles);
             var alignment = new ComboBox { Width = 140, ToolTip = "Выравнивание абзацев", Margin = new Thickness(0,2,6,2) };
             foreach (string label in new[] { "Выравнивание", "Слева", "По центру", "Справа", "По ширине" }) alignment.Items.Add(label);
             alignment.SelectedIndex = 0;
@@ -131,7 +177,14 @@ namespace ReFix.QuickNote
                 ApplyFormatting(() => editor.Selection.ApplyPropertyValue(Paragraph.TextAlignmentProperty,value));
                 alignment.SelectedIndex = 0;
             };
-            tools.Children.Add(alignment);
+            paragraphGroup.Children.Add(alignment);
+            var marks=Button("¶",delegate { showSymbols=!showSymbols;highlights.ShowSymbols=showSymbols;highlights.InvalidateVisual(); });
+            marks.ToolTip="Показать непечатаемые символы";
+            paragraphGroup.Children.Add(marks);
+
+            var lists=ToolbarGroup("Списки");
+            lists.Children.Add(FormatButton("• ≡", "Маркированный список", () => ToggleList(EditingCommands.ToggleBullets), FontWeights.Normal, FontStyles.Normal, null));
+            lists.Children.Add(FormatButton("1. ≡", "Нумерованный список", () => ToggleList(EditingCommands.ToggleNumbering), FontWeights.Normal, FontStyles.Normal, null));
             Button levels = null;
             levels = Button("Списки ▾", delegate
             {
@@ -147,10 +200,14 @@ namespace ReFix.QuickNote
                 Command(menu, "Уменьшить отступ", () => ApplyFormatting(() => ChangeIndent(false)));
                 menu.IsOpen = true;
             });
-            tools.Children.Add(levels);
-            AddIndentTools();
-            tools.Children.Add(Button("☺", delegate { editor.Focus(); EmojiPicker.Open(); }));
-            tools.Children.Add(Button("¶", delegate { showSymbols = !showSymbols; highlights.ShowSymbols = showSymbols; highlights.InvalidateVisual(); }));
+            lists.Children.Add(levels);
+            AddIndentTools(ToolbarGroup("Горизонтальный отступ"));
+            AddSpacingTools(ToolbarGroup("Интервалы абзаца"));
+            var insert=ToolbarGroup("Вставка");
+            insert.Children.Add(Button("Изображение",SelectImages));
+            var emoji=Button("☺",delegate { editor.Focus();EmojiPicker.Open(); });
+            emoji.ToolTip="Эмодзи";
+            insert.Children.Add(emoji);
         }
 
         void SetMarker(TextMarkerStyle marker)
@@ -242,7 +299,7 @@ namespace ReFix.QuickNote
             Add(findPane, top, Dock.Top);
             findPane.Children.Add(replacePane);
             DockPanel.SetDock(findPane, Dock.Top);
-            root.Children.Insert(root.Children.IndexOf(tools) + 1, findPane);
+            root.Children.Insert(root.Children.IndexOf(toolbar) + 1, findPane);
             query.TextChanged += delegate { RefreshMatches(false); };
             matchCase.Click += delegate { RefreshMatches(false); };
             replaceMode.SelectionChanged += delegate { activeMatch = -1; UpdateMatchStatus(); };

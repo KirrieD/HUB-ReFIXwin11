@@ -27,6 +27,7 @@ namespace ReFix.QuickNote
         readonly DockPanel root;
         readonly Grid page;
         readonly WrapPanel tools;
+        readonly ScrollViewer toolbar;
         TextRange formattingSelection;
         bool bodyDirty, metadataDirty, disposed, saveFailed;
 
@@ -48,28 +49,9 @@ namespace ReFix.QuickNote
             Add(root, name, Dock.Top);
 
             tools = new WrapPanel { Margin = new Thickness(0, 5, 0, 5) };
-            var styles = new ComboBox { MinWidth = 130, Margin = new Thickness(0, 2, 6, 2), ToolTip = "Стиль абзаца" };
-            styles.Items.Add(new ComboBoxItem { Content = "Стиль абзаца", IsEnabled = false });
-            styles.Items.Add("Обычный текст");
-            for (int i = 1; i <= 3; i++) styles.Items.Add("Заголовок " + i);
-            for (int i = 1; i <= 3; i++) styles.Items.Add("Подзаголовок " + i);
-            styles.SelectedIndex = 0;
-            styles.SelectionChanged += delegate { if (styles.SelectedIndex > 0) { int style=styles.SelectedIndex-1; ApplyFormatting(()=>ApplyStyle(style)); styles.SelectedIndex=0; } };
-            styles.IsEditable = false;
-            tools.Children.Add(styles);
-            tools.Children.Add(FormatButton("B", "Жирный", () => EditingCommands.ToggleBold.Execute(null, editor), FontWeights.Bold, FontStyles.Normal, null));
-            tools.Children.Add(FormatButton("I", "Курсив", () => EditingCommands.ToggleItalic.Execute(null, editor), FontWeights.Normal, FontStyles.Italic, null));
-            tools.Children.Add(FormatButton("S", "Зачёркивание", () => ToggleDecoration(TextDecorationLocation.Strikethrough, TextDecorations.Strikethrough[0]), FontWeights.Normal, FontStyles.Normal, TextDecorations.Strikethrough));
-            tools.Children.Add(FormatButton("P", "Подчёркивание", () => ToggleDecoration(TextDecorationLocation.Underline, TextDecorations.Underline[0]), FontWeights.Normal, FontStyles.Normal, TextDecorations.Underline));
-            tools.Children.Add(FormatButton("• ≡", "Маркированный список", () => ToggleList(EditingCommands.ToggleBullets), FontWeights.Normal, FontStyles.Normal, null));
-            tools.Children.Add(FormatButton("1. ≡", "Нумерованный список", () => ToggleList(EditingCommands.ToggleNumbering), FontWeights.Normal, FontStyles.Normal, null));
-            Button textColor = null, background = null;
-            textColor = Button("Цвет текста", () => Palette(textColor, TextElement.ForegroundProperty));
-            background = Button("Цвет фона текста", () => Palette(background, TextElement.BackgroundProperty));
-            tools.Children.Add(textColor);
-            tools.Children.Add(background);
-            tools.Children.Add(Button("Вставить изображение", SelectImages));
-            Add(root, tools, Dock.Top);
+            toolbar=new ScrollViewer {Content=tools,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,MaxHeight=230};
+            SizeChanged+=delegate{toolbar.MaxHeight=Math.Max(95,ActualHeight*.40);};
+            Add(root, toolbar, Dock.Top);
 
             topHint = Hint(root, "Верхняя подсказка", note.TopHint, Dock.Top);
             status.Margin = new Thickness(0, 8, 0, 0);
@@ -119,7 +101,6 @@ namespace ReFix.QuickNote
             controls.Changed += ControlsChanged;
             PreviewKeyDown += HandleKey;
             ConfigureWorkspace();
-            AddWorkspaceColorButton();
             if (!note.Markdown) ConfigureListInput();
             UpdateStatus();
         }
@@ -251,17 +232,18 @@ namespace ReFix.QuickNote
             Palette(button, color => ApplyColor(range, property, color));
         }
 
-        void AddWorkspaceColorButton()
+        void AddWorkspaceColorButton(Panel group)
         {
             Button button = null;
-            button = Button("Цвет фона рабочей области", () => Palette(button, color =>
+            button = Button("Фон заметки", () => Palette(button, color =>
             {
                 note.WorkspaceColor = color;
                 ApplyWorkspaceColor();
                 metadataDirty = true;
                 QueueSave();
             }));
-            tools.Children.Add(button);
+            button.ToolTip="Цвет фона рабочей области";
+            group.Children.Add(button);
         }
 
         void ApplyWorkspaceColor()

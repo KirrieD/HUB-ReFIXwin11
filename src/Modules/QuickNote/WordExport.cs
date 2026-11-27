@@ -63,6 +63,13 @@ namespace ReFix.QuickNote
                     props.Add(new XElement(W+"numPr",Val("ilvl",Math.Min(8,Math.Max(0,depth-1))),Val("numId",number)));
                     markerPending = false;
                 }
+                if(block.SpaceBefore.HasValue||block.SpaceAfter.HasValue)
+                {
+                    var spacing=new XElement(W+"spacing");
+                    if(block.SpaceBefore.HasValue)spacing.SetAttributeValue(W+"before",(int)Math.Round(block.SpaceBefore.Value*15));
+                    if(block.SpaceAfter.HasValue)spacing.SetAttributeValue(W+"after",(int)Math.Round(block.SpaceAfter.Value*15));
+                    props.Add(spacing);
+                }
                 props.Add(Val("jc",align));
                 var paragraph = new XElement(W+"p",props);
                 foreach (var part in block.Parts) paragraph.Add(Run(part));
