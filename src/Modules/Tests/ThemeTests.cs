@@ -168,6 +168,19 @@ internal static class ModuleThemeTests
                     tabMenu.IsOpen=false;
                     closeFromMenu.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                     Require(tabs.Items.Count==1&&((TabItem)tabs.SelectedItem).Tag==record&&secondRecord.TabClosed,"Context menu closes only the chosen tab");
+                    controller.Open(secondRecord);
+                    var renameTab=((DockPanel)tabs.Items.OfType<TabItem>().Single(t=>t.Tag==record).Header).ContextMenu;
+                    renameTab.IsOpen=true;
+                    renameTab.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Переименовать заметку…")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    var renameFrame=new System.Windows.Threading.DispatcherFrame();
+                    tabs.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,new Action(()=>renameFrame.Continue=false));
+                    System.Windows.Threading.Dispatcher.PushFrame(renameFrame);
+                    var renaming=controller.Editor(record);
+                    var renameField=(TextBox)typeof(NoteEditor).GetField("name",fields).GetValue(renaming);
+                    Require(((TabItem)tabs.SelectedItem).Tag==record&&renameField.IsVisible&&renameField.SelectedText==record.Name,"Renaming an inactive tab targets that note and selects its title");
+                    renameField.Text="Новое название";
+                    Require(renaming.Save()&&new Library(Paths.Root).Index.Notes.Single(n=>n.Id==record.Id).Name=="Новое название"&&
+                        ((DockPanel)((TabItem)tabs.SelectedItem).Header).Children.OfType<TextBlock>().Single().Text=="Новое название","The new title is persisted and shown on the tab");
                 }
                 }
                 System.IO.Directory.Delete(Paths.Root,true);

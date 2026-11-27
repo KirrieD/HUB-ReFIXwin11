@@ -239,7 +239,7 @@ namespace ReFix.QuickNote
             try { action(); }
             catch (Exception ex) { MessageBox.Show(ex.Message, "Быстрая заметка", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
-        void Rename() { name.Visibility = Visibility.Visible; name.Focus(); name.SelectAll(); }
+        internal void Rename() { name.Visibility = Visibility.Visible; name.Focus(); name.SelectAll(); }
         void InsertText(string value) { editor.Selection.Text = value; editor.CaretPosition = editor.Selection.End; editor.Focus(); }
         void SetZoom(int value)
         {

@@ -175,6 +175,22 @@ namespace ReFix.QuickNote
             menu.Opened += delegate
             {
                 menu.Items.Clear();
+                var renameItem=new MenuItem { Header="Переименовать заметку…" };
+                renameItem.Click+=delegate
+                {
+                    menu.IsOpen=false;
+                    Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,new Action(delegate
+                    {
+                        if(disposed||note.TabClosed||note.ListId!=list.Id)return;
+                        controller.Run(delegate
+                        {
+                            Open(note);
+                            UpdateLayout();
+                            controller.Editor(note).Rename();
+                        });
+                    }));
+                };
+                menu.Items.Add(renameItem);
                 var closeItem=new MenuItem { Header="Закрыть заметку" };
                 closeItem.Click+=delegate{CloseTab(note);};
                 menu.Items.Add(closeItem);
